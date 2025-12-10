@@ -35,12 +35,12 @@ type WebServer struct {
 	// Config
 	cfg *config.WebServerConfig
 
-	// DB
-	client *mongo.Client
-
 	// Core
 	router *http.ServeMux
 	server *http.Server
+
+	// DB
+	mongoClient *mongo.Client
 
 	services []service.GenericService
 }
@@ -51,6 +51,10 @@ func (s WebServer) GetContext() context.Context {
 
 func (s WebServer) GetRouter() *http.ServeMux {
 	return s.router
+}
+
+func (s WebServer) GetMongoClient() *mongo.Client {
+	return s.mongoClient
 }
 
 func (s *WebServer) Init() error {
@@ -98,7 +102,7 @@ Loop:
 
 	errs = nil
 	for _, svc := range s.services {
-		if err := svc.Init(); err != nil {
+		if err := svc.Init(s); err != nil {
 			errs = errors.Join(errs, err)
 			log.Println(err)
 		}
@@ -144,6 +148,10 @@ func (s *WebServer) Shutdown() error {
 		return err
 	}
 
+	if err := s.mongoClient.Disconnect(ctx); err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -168,7 +176,7 @@ func (s *WebServer) connectMongoTask(
 		defer connectCancel()
 
 		opts := mongo_options.Client().ApplyURI(s.cfg.MongoUri)
-		s.client, err = mongo.Connect(connectCtx, opts)
+		s.mongoClient, err = mongo.Connect(connectCtx, opts)
 
 		if err != nil {
 			log.Printf("MongoDB 연결 실패[uri:%v][err:%v]", s.cfg.MongoUri, err)

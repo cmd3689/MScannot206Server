@@ -1,7 +1,7 @@
 package service
 
 type GenericService interface {
-	Init() error
+	Init(host ServiceHost) error
 	Start() error
 	Stop() error
 }

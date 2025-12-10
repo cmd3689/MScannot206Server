@@ -29,10 +29,8 @@ func main() {
 		panic(err)
 	}
 
-	if login_service, err := login.NewLoginService(
-		web_server.GetContext(),
-		web_server.GetRouter(),
-	); err != nil {
+	// 로그인 서비스
+	if login_service, err := login.NewLoginService(web_server, web_server.GetRouter()); err != nil {
 		errs = errors.Join(errs, err)
 		log.Println(err)
 	} else {

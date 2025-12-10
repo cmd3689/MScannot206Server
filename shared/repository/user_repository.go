@@ -1,12 +1,18 @@
 package repository
 
-import "go.mongodb.org/mongo-driver/bson/primitive"
+func NewUser(uid string) *User {
+	return &User{
+		Uid: uid,
+	}
+}
 
 type User struct {
-	Id  primitive.ObjectID `json:"_id" bson:"_id"`
-	Uid string             `json:"uid" bson:"uid"`
+	Uid string `json:"uid" bson:"uid"`
 }
 
 type UserRepository interface {
+	Start() error
+	Stop() error
+
 	FindUserByUID(string) (*User, error)
 }
