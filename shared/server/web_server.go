@@ -19,18 +19,33 @@ func NewWebServer(
 	ctx context.Context,
 	cfg *config.WebServerConfig,
 ) (*WebServer, error) {
-	return &WebServer{
-		ctx: ctx,
-		cfg: cfg,
+	ctxWithCancel, cancel := context.WithCancel(ctx)
 
-		router: http.NewServeMux(),
+	webServerCfg := cfg
+	if webServerCfg == nil {
+		webServerCfg = &config.WebServerConfig{
+			Port: 8080,
 
+			MongoUri: "mongodb://localhost:27017/",
+		}
+	}
+
+	server := &WebServer{
+		ctx:        ctxWithCancel,
+		cancelFunc: cancel,
+
+		cfg: webServerCfg,
+
+		router:   http.NewServeMux(),
 		services: make([]service.GenericService, 0),
-	}, nil
+	}
+
+	return server, nil
 }
 
 type WebServer struct {
-	ctx context.Context
+	ctx        context.Context
+	cancelFunc context.CancelFunc
 
 	// Config
 	cfg *config.WebServerConfig
@@ -130,7 +145,6 @@ func (s *WebServer) Start() error {
 		}
 	}
 
-	// TODO: 고루틴 이용 할 수 있도록 해야 함.
 	return s.server.ListenAndServe()
 }
 
@@ -141,7 +155,7 @@ func (s *WebServer) Shutdown() error {
 		}
 	}
 
-	ctx, cancel := context.WithTimeout(s.ctx, 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	if err := s.server.Shutdown(ctx); err != nil {

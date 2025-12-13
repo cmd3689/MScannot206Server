@@ -6,23 +6,28 @@ import (
 	"MScannot206/shared/server"
 	"context"
 	"errors"
+	"flag"
 	"log"
 )
 
 func main() {
 	var errs error
 
-	ctx := context.Background()
+	var cfgPath string
 
-	webServerCfg := &config.WebServerConfig{
-		Port: 8080,
+	flag.StringVar(&cfgPath, "config", "", "서버 설정 파일 경로 지정")
+	flag.Parse()
 
-		MongoUri: "mongodb://localhost:27017/",
+	var cfg *config.WebServerConfig
+	if cfgPath != "" {
+		if err := config.LoadYamlConfig(cfgPath, cfg); err != nil {
+			log.Default().Printf("서버 설정 파일 로드 실패:%v", err)
+		}
 	}
 
 	web_server, err := server.NewWebServer(
-		ctx,
-		webServerCfg,
+		context.Background(),
+		cfg,
 	)
 
 	if err != nil {
@@ -48,7 +53,13 @@ func main() {
 		panic(err)
 	}
 
-	if err := web_server.Start(); err != nil {
-		panic(err)
-	}
+	go func() {
+		if err := web_server.Start(); err != nil {
+			panic(err)
+		}
+	}()
+
+	<-web_server.GetContext().Done()
+
+	log.Println("웹 서버 종료")
 }

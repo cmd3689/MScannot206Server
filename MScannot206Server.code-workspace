@@ -4,21 +4,64 @@
 			"path": "."
 		}
 	],
+	"tasks": {
+		"version": "2.0.0",
+		"tasks": [
+			{
+				"label": "build MScannot206Server",
+				"type": "shell",
+				"command": "go build -o ${workspaceFolder}/bin/MScannot206Server.exe ${workspaceFolder}/cmd/server",
+				"group": {
+					"kind": "build",
+					"isDefault": true
+				},
+				"presentation": {
+					"reveal": "always",
+					"panel": "new",
+				}
+			},
+			{
+				"label": "build testClient",
+				"type": "shell",
+				"command": "go build -o ${workspaceFolder}/testclient/bin/MScannot206Client.exe ${workspaceFolder}/cmd/client",
+				"group": {
+					"kind": "build",
+					"isDefault": false
+				},
+				"presentation": {
+					"reveal": "always",
+					"panel": "new",
+				}
+			}
+		]
+	},
 	"launch": {
 		"version": "0.2.0",
 		"configurations": [
 			{
-				"name": "Lanuch MapleServer",
+				"name": "lanuch MScannot206Server",
 				"type": "go",
 				"request": "launch",
 				"mode": "auto",
-				"cwd": "${workspaceFolder}",
-				"program": "${workspaceFolder}/cmd",
+				"cwd": "${workspaceFolder}/cmd/server",
+				"program": "${workspaceFolder}/cmd/server",
 				"console": "integratedTerminal",
-				"output": "${workspaceFolder}/bin/MapleServer.exe",
+				"output": "${workspaceFolder}/bin/MScannot206Server_debug.exe",
 				"env": {},
 				"args": []
-			}
+			},
+			{
+				"name": "lanuch testClient",
+				"type": "go",
+				"request": "launch",
+				"mode": "auto",
+				"cwd": "${workspaceFolder}/cmd/client",
+				"program": "${workspaceFolder}/cmd/client",
+				"console": "integratedTerminal",
+				"output": "${workspaceFolder}/bin/MScannot206Client_debug.exe",
+				"env": {},
+				"args": []
+			},
 		],
 		"compounds": []
 	},
