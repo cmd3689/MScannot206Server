@@ -1,11 +1,11 @@
 package repository
 
-import "MScannot206/shared/entity"
+import (
+	"MScannot206/shared/entity"
+	"context"
+)
 
 type UserRepository interface {
-	Start() error
-	Stop() error
-
-	FindUserByUids(uids []string) ([]*entity.User, []string, error)
-	InsertUserByUids(uids []string) ([]*entity.User, error)
+	FindUserByUids(ctx context.Context, uids []string) ([]*entity.User, []string, error)
+	InsertUserByUids(ctx context.Context, uids []string) ([]*entity.User, error)
 }

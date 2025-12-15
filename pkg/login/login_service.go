@@ -50,7 +50,7 @@ func (s *LoginService) Init() error {
 	// TODO: 외부에서 가져올 수 있도록 수정 필요
 	dbName := "MStest"
 
-	s.userRepo, err = mongo.NewUserRepository(s.host.GetContext(), s.host.GetMongoClient(), dbName)
+	s.userRepo, err = mongo.NewUserRepository(s.host.GetMongoClient(), dbName)
 	if err != nil {
 		log.Err(err)
 		errs = errors.Join(errs, err)
@@ -72,34 +72,15 @@ func (s *LoginService) Init() error {
 }
 
 func (s *LoginService) Start() error {
-	var errs error
-
-	if err := s.userRepo.Start(); err != nil {
-		errs = errors.Join(errs, err)
-	}
-
-	if errs != nil {
-		return errs
-	}
-
 	return nil
 }
 
 func (s *LoginService) Stop() error {
-	var errs error
-
-	if err := s.userRepo.Stop(); err != nil {
-		errs = errors.Join(errs, err)
-	}
-
-	if errs != nil {
-		return errs
-	}
-
 	return nil
 }
 
 func (s *LoginService) onLogin(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
 
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
@@ -114,7 +95,7 @@ func (s *LoginService) onLogin(w http.ResponseWriter, r *http.Request) {
 
 	var response LoginResponse
 
-	users, newUids, err := s.userRepo.FindUserByUids(req.Uids)
+	users, newUids, err := s.userRepo.FindUserByUids(ctx, req.Uids)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -122,7 +103,7 @@ func (s *LoginService) onLogin(w http.ResponseWriter, r *http.Request) {
 
 	// 신규 유저 생성
 	if len(newUids) > 0 {
-		newUsers, err := s.userRepo.InsertUserByUids(newUids)
+		newUsers, err := s.userRepo.InsertUserByUids(ctx, newUids)
 		if err != nil {
 			// 신규 유저는 로그인 불가
 			log.Printf("신규 유저 생성 불가: %v", err)
@@ -141,7 +122,7 @@ func (s *LoginService) onLogin(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	sessions, failureUsers, err := s.authService.CreateUserSessions(users)
+	sessions, failureUsers, err := s.authService.CreateUserSessions(ctx, users)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return

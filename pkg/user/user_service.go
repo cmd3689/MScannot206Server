@@ -29,7 +29,7 @@ func (s *UserService) Init() error {
 
 	dbName := "MStest"
 
-	s.userRepo, err = mongo.NewUserRepository(s.host.GetContext(), s.host.GetMongoClient(), dbName)
+	s.userRepo, err = mongo.NewUserRepository(s.host.GetMongoClient(), dbName)
 	if err != nil {
 		return err
 	}
@@ -38,17 +38,9 @@ func (s *UserService) Init() error {
 }
 
 func (s *UserService) Start() error {
-	if err := s.userRepo.Start(); err != nil {
-		return err
-	}
-
 	return nil
 }
 
 func (s *UserService) Stop() error {
-	if err := s.userRepo.Stop(); err != nil {
-		return err
-	}
-
 	return nil
 }

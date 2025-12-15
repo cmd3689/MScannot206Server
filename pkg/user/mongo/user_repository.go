@@ -12,7 +12,6 @@ import (
 )
 
 func NewUserRepository(
-	ctx context.Context,
 	client *mongo.Client,
 	dbName string,
 ) (*UserRepository, error) {
@@ -31,21 +30,12 @@ func NewUserRepository(
 }
 
 type UserRepository struct {
-	ctx    context.Context
 	client *mongo.Client
 
 	user *mongo.Collection
 }
 
-func (r *UserRepository) Start() error {
-	return nil
-}
-
-func (r *UserRepository) Stop() error {
-	return nil
-}
-
-func (r *UserRepository) FindUserByUids(uids []string) ([]*entity.User, []string, error) {
+func (r *UserRepository) FindUserByUids(ctx context.Context, uids []string) ([]*entity.User, []string, error) {
 	requestCount := len(uids)
 	var users []*entity.User
 	newUids := make([]string, 0, requestCount)
@@ -54,13 +44,13 @@ func (r *UserRepository) FindUserByUids(uids []string) ([]*entity.User, []string
 		{Key: "uid", Value: bson.D{{Key: "$in", Value: uids}}},
 	}
 
-	cursor, err := r.user.Find(r.ctx, filter)
+	cursor, err := r.user.Find(ctx, filter)
 	if err != nil {
 		return nil, nil, err
 	}
-	defer cursor.Close(r.ctx)
+	defer cursor.Close(ctx)
 
-	if err := cursor.All(r.ctx, &users); err != nil {
+	if err := cursor.All(ctx, &users); err != nil {
 		if err == mongo.ErrNoDocuments {
 			users = []*entity.User{}
 		} else {
@@ -86,7 +76,7 @@ func (r *UserRepository) FindUserByUids(uids []string) ([]*entity.User, []string
 	return users, newUids, nil
 }
 
-func (r *UserRepository) InsertUserByUids(uids []string) ([]*entity.User, error) {
+func (r *UserRepository) InsertUserByUids(ctx context.Context, uids []string) ([]*entity.User, error) {
 	requestCount := len(uids)
 
 	if requestCount == 0 {
@@ -114,7 +104,7 @@ func (r *UserRepository) InsertUserByUids(uids []string) ([]*entity.User, error)
 		writeModels = append(writeModels, model)
 	}
 
-	_, err := r.user.BulkWrite(r.ctx, writeModels)
+	_, err := r.user.BulkWrite(ctx, writeModels)
 	if err != nil {
 		return nil, err
 	}

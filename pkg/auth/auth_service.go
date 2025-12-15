@@ -1,8 +1,11 @@
 package auth
 
 import (
+	"MScannot206/pkg/auth/mongo"
 	"MScannot206/shared/entity"
+	"MScannot206/shared/repository"
 	"MScannot206/shared/service"
+	"context"
 	"crypto/rand"
 	"encoding/base64"
 	"errors"
@@ -24,9 +27,19 @@ func NewAuthService(
 
 type AuthService struct {
 	host service.ServiceHost
+
+	sessionRepo repository.SessionRepository
 }
 
 func (s *AuthService) Init() error {
+	var err error
+
+	dbName := "MStest"
+	s.sessionRepo, err = mongo.NewSessionRepository(s.host.GetContext(), s.host.GetMongoClient(), dbName)
+	if err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -47,7 +60,7 @@ func generateToken() (string, error) {
 	return base64.URLEncoding.EncodeToString(b), nil
 }
 
-func (s *AuthService) CreateUserSessions(user []*entity.User) ([]*entity.UserSession, []*entity.User, error) {
+func (s *AuthService) CreateUserSessions(ctx context.Context, user []*entity.User) ([]*entity.UserSession, []*entity.User, error) {
 	sessions := make([]*entity.UserSession, 0, len(user))
 	failureUsers := make([]*entity.User, 0)
 
@@ -66,7 +79,10 @@ func (s *AuthService) CreateUserSessions(user []*entity.User) ([]*entity.UserSes
 		sessions = append(sessions, session)
 	}
 
-	// TODO: db에 세션 저장 로직 추가 필요
+	err := s.sessionRepo.SaveUserSessions(ctx, sessions)
+	if err != nil {
+		return nil, nil, err
+	}
 
 	return sessions, failureUsers, nil
 }

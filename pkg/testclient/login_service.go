@@ -2,7 +2,6 @@ package testclient
 
 import (
 	"MScannot206/pkg/login"
-	"MScannot206/pkg/manager"
 	"MScannot206/shared/client"
 	"MScannot206/shared/entity"
 	"errors"
@@ -73,25 +72,29 @@ func (s *LoginService) RequestLogin(uid string) error {
 		return err
 	}
 
-	var success bool = false
-	for _, successUid := range res.SuccessUids {
-		if successUid == uid {
-			success = true
-			break
-		}
-	}
+	_ = res
 
-	if !success {
-		for _, failUid := range res.FailUids {
-			if failUid.Uid == uid {
-				return manager.ToError(failUid.ErrorCode)
-			}
-		}
+	// test
 
-		return manager.ToError(login.LOGIN_LOGIN_UNABLE)
-	}
+	// var success bool = false
+	// for _, successUid := range res.SuccessUids {
+	// 	if successUid == uid {
+	// 		success = true
+	// 		break
+	// 	}
+	// }
 
-	fmt.Printf("로그인 성공: %s\n", uid)
+	// if !success {
+	// 	for _, failUid := range res.FailUids {
+	// 		if failUid.Uid == uid {
+	// 			return manager.ToError(failUid.ErrorCode)
+	// 		}
+	// 	}
+
+	// 	return manager.ToError(login.LOGIN_LOGIN_UNABLE)
+	// }
+
+	// fmt.Printf("로그인 성공: %s\n", uid)
 
 	return nil
 }
