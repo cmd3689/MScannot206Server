@@ -6,12 +6,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
 	"net/http"
 	"sort"
 	"sync"
 	"time"
 
+	"github.com/rs/zerolog/log"
 	"go.mongodb.org/mongo-driver/mongo"
 	mongo_options "go.mongodb.org/mongo-driver/mongo/options"
 )
@@ -98,15 +98,15 @@ Loop:
 		case taskErr := <-taskCh:
 			if taskErr != nil {
 				errs = errors.Join(errs, taskErr)
-				log.Printf("초기화 에러 발생: %v", taskErr)
+				log.Err(taskErr).Msg("초기화 중 에러가 발생하였습니다.")
 			}
 
 		case <-allDone:
-			log.Printf("초기화 작업 완료")
+			log.Info().Msg("초기화 작업이 완료되었습니다.")
 			break Loop
 
 		case <-s.ctx.Done():
-			log.Printf("서버 Context 취소, 초기화 중단")
+			log.Info().Msg("서버 Context 취소되었습니다., 초기화 작업을 중단합니다.")
 			return s.ctx.Err()
 		}
 
@@ -125,7 +125,7 @@ Loop:
 	for _, svc := range s.services {
 		if err := svc.Init(); err != nil {
 			errs = errors.Join(errs, err)
-			log.Println(err)
+			log.Err(err).Msg("서비스 초기화 중 에러가 발생하였습니다.")
 		}
 	}
 
@@ -147,7 +147,7 @@ Loop:
 func (s *WebServer) Start() error {
 	for _, svc := range s.services {
 		if err := svc.Start(); err != nil {
-			log.Println(err)
+			log.Err(err).Msg("서버 시작 중 에러가 발생하였습니다.")
 		}
 	}
 
@@ -157,7 +157,7 @@ func (s *WebServer) Start() error {
 func (s *WebServer) Quit() error {
 	for _, svc := range s.services {
 		if err := svc.Stop(); err != nil {
-			log.Println(err)
+			log.Err(err).Msg("서버 종료 중 에러가 발생하였습니다.")
 		}
 	}
 
@@ -204,11 +204,11 @@ func (s *WebServer) connectMongoTask(
 		s.mongoClient, err = mongo.Connect(connectCtx, opts)
 
 		if err != nil {
-			log.Printf("MongoDB 연결 실패[uri:%v][err:%v]", s.cfg.MongoUri, err)
+			log.Err(err).Msgf("MongoDB 연결에 실패하였습니다. [uri:%v]", s.cfg.MongoUri)
 			taskCh <- err
 			return
 		}
 
-		log.Printf("MongoDB 연결 완료[uri:%v]", s.cfg.MongoUri)
+		log.Info().Msgf("MongoDB 연결 완료이 완료되었습니다. [uri:%v]", s.cfg.MongoUri)
 	}
 }
