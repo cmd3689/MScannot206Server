@@ -2,6 +2,7 @@ package login
 
 import (
 	"MScannot206/pkg/auth"
+	"MScannot206/pkg/serverinfo"
 	"MScannot206/pkg/user"
 	"MScannot206/shared/repository"
 	"MScannot206/shared/service"
@@ -40,19 +41,29 @@ type LoginService struct {
 	userService *user.UserService
 }
 
+func (s *LoginService) GetPriority() int {
+	return 0
+}
+
 func (s *LoginService) Init() error {
 	var errs error
 	var err error
+	var gameDBName string = ""
 
 	s.router.HandleFunc("/login", s.onLogin)
 
-	// TODO: 외부에서 가져올 수 있도록 수정 필요
-	dbName := "MStest"
-
-	s.userRepo, err = user.NewUserRepository(s.host.GetMongoClient(), dbName)
+	serverInfoService, err := service.GetService[*serverinfo.ServerInfoService](s.host)
 	if err != nil {
 		log.Err(err)
 		errs = errors.Join(errs, err)
+	} else {
+		srvInfo, err := serverInfoService.GetInfo()
+		if err != nil {
+			log.Err(err)
+			errs = errors.Join(errs, err)
+		} else {
+			gameDBName = srvInfo.GameDBName
+		}
 	}
 
 	s.authService, err = service.GetService[*auth.AuthService](s.host)
@@ -62,6 +73,12 @@ func (s *LoginService) Init() error {
 	}
 
 	s.userService, err = service.GetService[*user.UserService](s.host)
+	if err != nil {
+		log.Err(err)
+		errs = errors.Join(errs, err)
+	}
+
+	s.userRepo, err = user.NewUserRepository(s.host.GetMongoClient(), gameDBName)
 	if err != nil {
 		log.Err(err)
 		errs = errors.Join(errs, err)

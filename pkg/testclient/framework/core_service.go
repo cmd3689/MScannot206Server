@@ -36,6 +36,10 @@ type CoreService struct {
 	commands map[string]ClientCommand
 }
 
+func (s *CoreService) GetPriority() int {
+	return 10
+}
+
 func (s *CoreService) Init() error {
 	return nil
 }

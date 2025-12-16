@@ -28,6 +28,10 @@ type LoginService struct {
 	users map[string]*entity.User
 }
 
+func (s *LoginService) GetPriority() int {
+	return 0
+}
+
 func (s *LoginService) Init() error {
 	return nil
 }

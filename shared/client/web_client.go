@@ -11,6 +11,7 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"sort"
 	"strings"
 	"time"
 
@@ -81,6 +82,10 @@ func (c *WebClient) Init() error {
 	if c.url == "" {
 		return errors.New("웹 클라이언트 URL이 비어있습니다")
 	}
+
+	sort.Slice(c.services, func(i, j int) bool {
+		return c.services[i].GetPriority() < c.services[j].GetPriority()
+	})
 
 	for _, svc := range c.services {
 		if err := svc.Init(); err != nil {

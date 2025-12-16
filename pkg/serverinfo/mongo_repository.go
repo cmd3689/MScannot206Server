@@ -10,7 +10,7 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
-const collectionName = "service_configs"
+const collectionName = "server_info"
 
 func NewServerInfoRepository(client *mongo.Client, dbName string) (*ServerInfoRepository, error) {
 	if client == nil {
@@ -28,7 +28,7 @@ type ServerInfoRepository struct {
 	collection *mongo.Collection
 }
 
-func (r *ServerInfoRepository) GetConfig(ctx context.Context, name string) (*ServerInfo, error) {
+func (r *ServerInfoRepository) GetInfo(ctx context.Context, name string) (*ServerInfo, error) {
 	filter := bson.M{"_id": name}
 
 	var info ServerInfo
@@ -43,7 +43,7 @@ func (r *ServerInfoRepository) GetConfig(ctx context.Context, name string) (*Ser
 	return &info, nil
 }
 
-func (r *ServerInfoRepository) SaveConfig(ctx context.Context, info *ServerInfo) error {
+func (r *ServerInfoRepository) SetInfo(ctx context.Context, info *ServerInfo) error {
 	info.UpdatedAt = time.Now().UTC()
 
 	filter := bson.M{"_id": info.Name}

@@ -1,9 +1,12 @@
 package user
 
 import (
+	"MScannot206/pkg/serverinfo"
 	"MScannot206/shared/repository"
 	"MScannot206/shared/service"
 	"errors"
+
+	"github.com/rs/zerolog/log"
 )
 
 func NewUserService(
@@ -23,17 +26,35 @@ type UserService struct {
 	userRepo repository.UserRepository
 }
 
+func (s *UserService) GetPriority() int {
+	return 0
+}
+
 func (s *UserService) Init() error {
+	var errs error
 	var err error
+	var gameDBName string = ""
 
-	dbName := "MStest"
+	serverInfoService, err := service.GetService[*serverinfo.ServerInfoService](s.host)
+	if err != nil {
+		log.Err(err)
+		errs = errors.Join(errs, err)
+	} else {
+		srvInfo, err := serverInfoService.GetInfo()
+		if err != nil {
+			log.Err(err)
+			errs = errors.Join(errs, err)
+		} else {
+			gameDBName = srvInfo.GameDBName
+		}
+	}
 
-	s.userRepo, err = NewUserRepository(s.host.GetMongoClient(), dbName)
+	s.userRepo, err = NewUserRepository(s.host.GetMongoClient(), gameDBName)
 	if err != nil {
 		return err
 	}
 
-	return nil
+	return errs
 }
 
 func (s *UserService) Start() error {

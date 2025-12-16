@@ -2,6 +2,7 @@ package auth
 
 import (
 	"MScannot206/pkg/auth/session"
+	"MScannot206/pkg/serverinfo"
 	"MScannot206/shared/entity"
 	"MScannot206/shared/repository"
 	"MScannot206/shared/service"
@@ -31,16 +32,35 @@ type AuthService struct {
 	sessionRepo repository.SessionRepository
 }
 
-func (s *AuthService) Init() error {
-	var err error
+func (s *AuthService) GetPriority() int {
+	return 0
+}
 
-	dbName := "MStest"
-	s.sessionRepo, err = session.NewSessionRepository(s.host.GetContext(), s.host.GetMongoClient(), dbName)
+func (s *AuthService) Init() error {
+	var errs error
+	var err error
+	var gameDBName string = ""
+
+	serverInfoService, err := service.GetService[*serverinfo.ServerInfoService](s.host)
+	if err != nil {
+		log.Err(err)
+		errs = errors.Join(errs, err)
+	} else {
+		srvInfo, err := serverInfoService.GetInfo()
+		if err != nil {
+			log.Err(err)
+			errs = errors.Join(errs, err)
+		} else {
+			gameDBName = srvInfo.GameDBName
+		}
+	}
+
+	s.sessionRepo, err = session.NewSessionRepository(s.host.GetContext(), s.host.GetMongoClient(), gameDBName)
 	if err != nil {
 		return err
 	}
 
-	return nil
+	return errs
 }
 
 func (s *AuthService) Start() error {

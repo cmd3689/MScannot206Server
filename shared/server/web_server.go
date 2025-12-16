@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"sort"
 	"sync"
 	"time"
 
@@ -116,6 +117,11 @@ Loop:
 	}
 
 	errs = nil
+
+	sort.Slice(s.services, func(i, j int) bool {
+		return s.services[i].GetPriority() > s.services[j].GetPriority()
+	})
+
 	for _, svc := range s.services {
 		if err := svc.Init(); err != nil {
 			errs = errors.Join(errs, err)

@@ -20,6 +20,10 @@ func NewUserRepository(
 		return nil, errors.New("mongo client is null")
 	}
 
+	if dbName == "" {
+		return nil, errors.New("database name is empty")
+	}
+
 	repo := &UserRepository{
 		client: client,
 	}
