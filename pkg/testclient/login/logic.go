@@ -12,7 +12,7 @@ import (
 
 func NewLoginLogic(client framework.Client) (*LoginLogic, error) {
 	if client == nil {
-		return nil, errors.New("http client is nil")
+		return nil, framework.ErrClientIsNil
 	}
 
 	s := &LoginLogic{
@@ -24,6 +24,8 @@ func NewLoginLogic(client framework.Client) (*LoginLogic, error) {
 
 type LoginLogic struct {
 	client framework.Client
+
+	userLogicHandler UserLogicHandler
 }
 
 func (l *LoginLogic) Init() error {
@@ -37,6 +39,20 @@ func (l *LoginLogic) Start() error {
 func (l *LoginLogic) Stop() error {
 	return nil
 }
+
+func (l *LoginLogic) SetHandlers(
+	userLogicHandler UserLogicHandler,
+) error {
+	var errs error
+
+	l.userLogicHandler = userLogicHandler
+	if userLogicHandler == nil {
+		errs = errors.Join(errs, UserLogicHandlerIsNil)
+	}
+
+	return errs
+}
+
 func (l *LoginLogic) RequestLogin(uid string) error {
 	if uid == "" {
 		return fmt.Errorf("uid is empty")
@@ -77,6 +93,10 @@ func (l *LoginLogic) RequestLogin(uid string) error {
 
 	if token == "" {
 		return shared.ToError(login.LOGIN_UNKOWN_ERROR)
+	}
+
+	if err := l.userLogicHandler.ConnectUser(uid, token); err != nil {
+		return err
 	}
 
 	log.Info().Msgf("로그인 성공: %s, 토큰: %s", uid, token)

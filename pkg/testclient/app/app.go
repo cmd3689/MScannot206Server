@@ -5,6 +5,7 @@ import (
 	"MScannot206/pkg/testclient/config"
 	"MScannot206/pkg/testclient/framework"
 	"MScannot206/pkg/testclient/login"
+	"MScannot206/pkg/testclient/user"
 	"context"
 	"errors"
 	"os"
@@ -26,6 +27,13 @@ func CreateTestClient(ctx context.Context, cfg *config.ClientConfig) (framework.
 		return nil, err
 	}
 
+	// 유저 로직
+	user_logic, err := user.NewUserLogic(client)
+	if err != nil {
+		errs = errors.Join(errs, err)
+		log.Error().Err(err).Msg("유저 서비스 생성 오류")
+	}
+
 	// 로그인 로직
 	login_logic, err := login.NewLoginLogic(client)
 	if err != nil {
@@ -39,6 +47,7 @@ func CreateTestClient(ctx context.Context, cfg *config.ClientConfig) (framework.
 
 	errs = nil
 	for _, l := range []framework.Logic{
+		user_logic,
 		login_logic,
 	} {
 		if err := client.AddLogic(l); err != nil {
@@ -52,15 +61,19 @@ func CreateTestClient(ctx context.Context, cfg *config.ClientConfig) (framework.
 
 func Run(client framework.Client) error {
 	if client == nil {
-		return errors.New("client is null")
+		return framework.ErrClientIsNil
+	}
+
+	if err := setupHandlers(client); err != nil {
+		return err
 	}
 
 	if err := client.Init(); err != nil {
-		panic(err)
+		return err
 	}
 
 	if err := RegisterCommands(client); err != nil {
-		panic(err)
+		return err
 	}
 
 	go func() {
@@ -81,6 +94,37 @@ func Run(client framework.Client) error {
 	}
 
 	return nil
+}
+
+func setupHandlers(client framework.Client) error {
+	var errs error
+
+	// 로직 수집
+	userLogic, err := framework.GetLogic[*user.UserLogic](client)
+	if err != nil {
+		errs = errors.Join(errs, err)
+		log.Err(err)
+	}
+
+	loginLogic, err := framework.GetLogic[*login.LoginLogic](client)
+	if err != nil {
+		errs = errors.Join(errs, err)
+		log.Err(err)
+	}
+
+	if errs != nil {
+		return errs
+	}
+
+	// 핸들러 등록
+	errs = nil
+
+	if err := loginLogic.SetHandlers(userLogic); err != nil {
+		errs = errors.Join(errs, err)
+		log.Err(err)
+	}
+
+	return errs
 }
 
 func RegisterCommands(client framework.Client) error {

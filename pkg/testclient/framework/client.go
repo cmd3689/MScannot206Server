@@ -2,8 +2,11 @@ package framework
 
 import (
 	"context"
+	"errors"
 	"net/http"
 )
+
+var ErrClientIsNil = errors.New("client is nil")
 
 type Client interface {
 	GetContext() context.Context
