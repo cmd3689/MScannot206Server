@@ -16,6 +16,8 @@ import (
 	mongo_options "go.mongodb.org/mongo-driver/mongo/options"
 )
 
+var ErrServeMuxIsNil = errors.New("serve mux is null")
+
 func NewWebServer(
 	ctx context.Context,
 	cfg *config.WebServerConfig,

@@ -1,13 +1,15 @@
 package login
 
+import "MScannot206/shared/entity"
+
 type LoginSuccess struct {
-	Uid   string `json:"uid"`
-	Token string `json:"token"`
+	UserEntity *entity.User `json:"user_entity"`
+	Token      string       `json:"token"`
 }
 
 type LoginFailure struct {
 	Uid       string `json:"uid"`
-	ErrorCode string `json:"error_code"`
+	ErrorCode string `json:"error_code,omitempty"`
 }
 
 type LoginResponse struct {

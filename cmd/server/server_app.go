@@ -91,7 +91,7 @@ func setupServices(server *server.WebServer, cfg *config.WebServerConfig) error 
 	}
 
 	// 유저 서비스
-	user_service, err := user.NewUserService(server)
+	user_service, err := user.NewUserService(server, server.GetRouter())
 	if err != nil {
 		errs = errors.Join(errs, err)
 		log.Error().Err(err).Msg("유저 서비스 생성 오류")
@@ -101,6 +101,10 @@ func setupServices(server *server.WebServer, cfg *config.WebServerConfig) error 
 		return errs
 	}
 
+	// Register Handlers
+	login_service.SetHandlers(auth_service)
+
+	// Add Services
 	errs = nil
 	for _, svc := range []service.Service{
 		serverInfo_service,

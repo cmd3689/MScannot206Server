@@ -6,6 +6,7 @@ import (
 	"MScannot206/pkg/testclient/framework"
 	"MScannot206/pkg/testclient/login"
 	"MScannot206/pkg/testclient/user"
+	"MScannot206/pkg/testclient/user/userselection"
 	"context"
 	"errors"
 	"os"
@@ -130,7 +131,13 @@ func setupHandlers(client framework.Client) error {
 func RegisterCommands(client framework.Client) error {
 	var errs error
 
-	loginCommand, err := login.NewLoginCommand(client)
+	loginCmd, err := login.NewLoginCommand(client)
+	if err != nil {
+		errs = errors.Join(errs, err)
+		log.Error().Err(err)
+	}
+
+	userSelectionCmd, err := userselection.NewUserSelectionCommand(client)
 	if err != nil {
 		errs = errors.Join(errs, err)
 		log.Err(err)
@@ -142,7 +149,8 @@ func RegisterCommands(client framework.Client) error {
 
 	errs = nil
 	for _, cmd := range []framework.ClientCommand{
-		loginCommand,
+		loginCmd,
+		userSelectionCmd,
 	} {
 		if err := client.AddCommand(cmd); err != nil {
 			errs = errors.Join(errs, err)

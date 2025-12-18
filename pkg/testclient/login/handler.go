@@ -1,10 +1,14 @@
 package login
 
-import "errors"
+import (
+	"MScannot206/pkg/testclient/user"
+	"MScannot206/shared/entity"
+	"errors"
+)
 
-var UserLogicHandlerIsNil = errors.New("user logic handler is nil")
+var ErrUserLogicHandlerIsNil = errors.New("user logic handler is nil")
 
 type UserLogicHandler interface {
-	ConnectUser(uid string, token string) error
+	ConnectUser(userEntity *entity.User, token string) (*user.User, error)
 	DisconnectUser(uid string) error
 }

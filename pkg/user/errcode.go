@@ -1,0 +1,11 @@
+package user
+
+import "MScannot206/shared"
+
+const USER_CHECK_CHARACTER_NAME_UNKOWN_ERROR = "USER_CHECK_CHARACTER_NAME_UNKOWN_ERROR"
+const USER_CREATE_CHARACTER_UNKOWN_ERROR = "USER_CREATE_CHARACTER_UNKOWN_ERROR"
+
+func init() {
+	shared.RegisterError(USER_CHECK_CHARACTER_NAME_UNKOWN_ERROR, "캐릭터 이름 확인 중 알 수 없는 오류")
+	shared.RegisterError(USER_CREATE_CHARACTER_UNKOWN_ERROR, "캐릭터 생성 중 알 수 없는 오류")
+}

@@ -3,25 +3,35 @@ package user
 import (
 	"MScannot206/pkg/serverinfo"
 	"MScannot206/shared/repository"
+	"MScannot206/shared/server"
 	"MScannot206/shared/service"
 	"errors"
+	"net/http"
 
 	"github.com/rs/zerolog/log"
 )
 
 func NewUserService(
 	host service.ServiceHost,
+	router *http.ServeMux,
 ) (*UserService, error) {
 	if host == nil {
-		return nil, errors.New("host is null")
+		return nil, service.ErrServiceHostIsNil
 	}
+
+	if router == nil {
+		return nil, server.ErrServeMuxIsNil
+	}
+
 	return &UserService{
-		host: host,
+		host:   host,
+		router: router,
 	}, nil
 }
 
 type UserService struct {
-	host service.ServiceHost
+	host   service.ServiceHost
+	router *http.ServeMux
 
 	userRepo repository.UserRepository
 }
@@ -62,14 +72,5 @@ func (s *UserService) Start() error {
 }
 
 func (s *UserService) Stop() error {
-	return nil
-}
-
-func (s *UserService) ConnectUser(uid string, token string) error {
-
-	return nil
-}
-
-func (s *UserService) DisconnectUser(uid string, token string) error {
 	return nil
 }

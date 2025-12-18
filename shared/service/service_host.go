@@ -7,6 +7,8 @@ import (
 	"go.mongodb.org/mongo-driver/mongo"
 )
 
+var ErrServiceHostIsNil = fmt.Errorf("service host is null")
+
 type ServiceHost interface {
 	// Core
 	GetContext() context.Context

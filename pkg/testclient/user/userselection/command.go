@@ -31,7 +31,7 @@ func (c *UserSelectionCommand) Execute(args []string) error {
 	}
 
 	if len(args) < 1 {
-		return fmt.Errorf("파라미터가 부족합니다")
+		return framework.ErrInvalidCommandArgument
 	}
 
 	uid := args[0]

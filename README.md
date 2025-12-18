@@ -4,3 +4,5 @@
 
 [메이플스토리 월드 크리에이터 이용약관](https://github.com/dek0058/MScannot206)을 준수하며, 해당 프로젝트는 비공식 프로젝트임을 알립니다.
 
+## 요구사항
+ - [MongoDB](https://www.mongodb.com/)

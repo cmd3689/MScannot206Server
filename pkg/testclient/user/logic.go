@@ -1,8 +1,18 @@
 package user
 
-import "MScannot206/pkg/testclient/framework"
+import (
+	"MScannot206/pkg/testclient/framework"
+	"MScannot206/pkg/testclient/user/character"
+	"MScannot206/pkg/user"
+	"MScannot206/shared"
+	"MScannot206/shared/def"
+	"MScannot206/shared/entity"
+	"errors"
+)
 
 const userCapacity = 1000
+
+var ErrUserNotFound = errors.New("유저를 찾지 못하였습니다")
 
 func NewUserLogic(client framework.Client) (*UserLogic, error) {
 	if client == nil {
@@ -33,19 +43,38 @@ func (l *UserLogic) Stop() error {
 	return nil
 }
 
-func (l *UserLogic) ConnectUser(uid string, token string) error {
-	l.users[uid] = &User{
-		Uid:   uid,
-		Token: token,
+func (l *UserLogic) ConnectUser(userEntity *entity.User, token string) (*User, error) {
+	var errs error
+
+	if userEntity == nil {
+		return nil, entity.ErrUserIsNil
 	}
 
-	l.users[uid].Init()
-	return nil
+	u, err := NewUser(userEntity.Uid, token)
+	if err != nil {
+		return nil, err
+	}
+	u.Characters = make([]*character.Character, 0, len(userEntity.Characters))
+	for _, entry := range userEntity.Characters {
+		ch, err := character.NewCharacter(entry.Key, entry.Name)
+		if err != nil {
+			errs = errors.Join(errs, err)
+			continue
+		}
+		u.Characters = append(u.Characters, ch)
+	}
+
+	if errs != nil {
+		return nil, errs
+	}
+
+	l.users[userEntity.Uid] = u
+	return u, nil
 }
 
 func (l *UserLogic) DisconnectUser(uid string) error {
-	if user, ok := l.users[uid]; ok {
-		user.Quit()
+	if u, ok := l.users[uid]; ok {
+		u.Quit()
 		delete(l.users, uid)
 	}
 	return nil
@@ -54,4 +83,125 @@ func (l *UserLogic) DisconnectUser(uid string) error {
 func (l *UserLogic) GetUser(uid string) (*User, bool) {
 	user, ok := l.users[uid]
 	return user, ok
+}
+
+func (l *UserLogic) GetCharacterSlotCount(uid string) (int, error) {
+	u, ok := l.users[uid]
+	if !ok {
+		return 0, ErrUserNotFound
+	}
+	var slotCount int
+	for _, ch := range u.Characters {
+		if ch != nil {
+			slotCount++
+		}
+	}
+	return slotCount, nil
+}
+
+func (l *UserLogic) RequestCheckCharacterName(uid string, name string) error {
+	u, ok := l.users[uid]
+	if !ok {
+		return ErrUserNotFound
+	}
+
+	req := &user.CheckCharacterNameRequest{
+		Requests: []user.UserNameCheckInfo{
+			{
+				Uid:   u.Uid,
+				Token: u.Token,
+				Name:  name,
+			},
+		},
+	}
+
+	res, err := framework.WebRequest[user.CheckCharacterNameRequest, user.CheckCharacterNameResponse](l.client).
+		Endpoint("user/character/create/check_name").
+		Body(req).
+		Post()
+
+	if err != nil {
+		return err
+	}
+
+	if len(res.Responses) == 0 {
+		return shared.ToError(user.USER_CHECK_CHARACTER_NAME_UNKOWN_ERROR)
+	}
+
+	var available bool = false
+	var errorCode string = ""
+	for _, resp := range res.Responses {
+		if resp.Uid == uid {
+			available = resp.Available
+			errorCode = resp.ErrorCode
+			break
+		}
+	}
+
+	if !available {
+		return shared.ToError(errorCode)
+	}
+
+	return nil
+}
+
+func (l *UserLogic) RequestCreateCharacter(uid string, slot int, name string) error {
+	u, ok := l.users[uid]
+	if !ok {
+		return ErrUserNotFound
+	}
+
+	slotCount, err := l.GetCharacterSlotCount(uid)
+	if err != nil {
+		return err
+	}
+
+	if slotCount >= def.MaxCharacterSlot {
+		return entity.ErrCharacterSlotIsFull
+	}
+
+	req := &user.CreateCharacterRequest{
+		Requests: []user.UserCreateCharacterInfo{
+			{
+				Uid:   u.Uid,
+				Token: u.Token,
+				Slot:  slot,
+				Name:  name,
+			},
+		},
+	}
+
+	res, err := framework.WebRequest[user.CreateCharacterRequest, user.CreateCharacterResponse](l.client).
+		Endpoint("user/character/create").
+		Body(req).
+		Post()
+
+	if err != nil {
+		return err
+	}
+
+	if len(res.Responses) == 0 {
+		return shared.ToError(user.USER_CREATE_CHARACTER_UNKOWN_ERROR)
+	}
+
+	var errorCode string = user.USER_CREATE_CHARACTER_UNKOWN_ERROR
+	for _, resp := range res.Responses {
+		if resp.Uid == uid && resp.Slot == slot {
+			errorCode = resp.ErrorCode
+			break
+		}
+	}
+
+	if errorCode != "" {
+		return shared.ToError(errorCode)
+	}
+
+	newCh, err := character.NewCharacter(slot, name)
+	if err != nil {
+		return err
+	}
+
+	u.Characters = append(u.Characters, newCh)
+
+	return nil
 }

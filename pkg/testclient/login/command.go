@@ -2,17 +2,29 @@ package login
 
 import (
 	"MScannot206/pkg/testclient/framework"
-	"fmt"
 )
 
 func NewLoginCommand(client framework.Client) (*LoginCommand, error) {
+	if client == nil {
+		return nil, framework.ErrClientIsNil
+	}
+
+	loginLogic, err := framework.GetLogic[*LoginLogic](client)
+	if err != nil {
+		return nil, err
+	}
+
 	return &LoginCommand{
 		client: client,
+
+		loginLogic: loginLogic,
 	}, nil
 }
 
 type LoginCommand struct {
 	client framework.Client
+
+	loginLogic *LoginLogic
 }
 
 func (c *LoginCommand) Commands() []string {
@@ -20,18 +32,13 @@ func (c *LoginCommand) Commands() []string {
 }
 
 func (c *LoginCommand) Execute(args []string) error {
-	loginLogic, err := framework.GetLogic[*LoginLogic](c.client)
-	if err != nil {
-		return err
-	}
-
 	if len(args) < 1 {
-		return fmt.Errorf("파라미터가 부족합니다")
+		return framework.ErrInvalidCommandArgument
 	}
 
 	uid := args[0]
 
-	if err := loginLogic.RequestLogin(uid); err != nil {
+	if err := c.loginLogic.RequestLogin(uid); err != nil {
 		return err
 	}
 

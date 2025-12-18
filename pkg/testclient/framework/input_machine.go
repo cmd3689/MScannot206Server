@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"sort"
 	"strings"
 
 	"github.com/rs/zerolog/log"
@@ -143,7 +144,18 @@ func (m *InputMachine) handleInput(input string) {
 func (m *InputMachine) printHelp() {
 	fmt.Println("사용 가능한 명령어 목록:")
 	println("-exit, -quit, -q: 프로그램 종료")
-	for _, cmd := range m.commands {
+
+	keys := make([]string, 0, len(m.commands))
+	for k := range m.commands {
+		keys = append(keys, k)
+	}
+
+	sort.Strings(keys)
+
+	for i := len(keys) - 1; i >= 0; i-- {
+		key := keys[i]
+		cmd := m.commands[key]
+
 		fmt.Println()
 		fmt.Println(cmd.Description())
 	}

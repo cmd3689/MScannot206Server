@@ -1,9 +1,12 @@
 package framework
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 )
+
+var ErrInvalidCommandArgument = errors.New("파라미터가 유효하지 않습니다")
 
 type ClientCommand interface {
 	Commands() []string

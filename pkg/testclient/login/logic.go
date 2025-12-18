@@ -3,7 +3,9 @@ package login
 import (
 	"MScannot206/pkg/login"
 	"MScannot206/pkg/testclient/framework"
+	"MScannot206/pkg/testclient/user/command"
 	"MScannot206/shared"
+	"MScannot206/shared/entity"
 	"errors"
 	"fmt"
 
@@ -47,7 +49,7 @@ func (l *LoginLogic) SetHandlers(
 
 	l.userLogicHandler = userLogicHandler
 	if userLogicHandler == nil {
-		errs = errors.Join(errs, UserLogicHandlerIsNil)
+		errs = errors.Join(errs, ErrUserLogicHandlerIsNil)
 	}
 
 	return errs
@@ -64,7 +66,10 @@ func (l *LoginLogic) RequestLogin(uid string) error {
 
 	log.Info().Msgf("로그인 요청: %s", uid)
 
-	res, err := framework.WebRequest[login.LoginRequest, login.LoginResponse](l.client).Endpoint("login").Body(req).Post()
+	res, err := framework.WebRequest[login.LoginRequest, login.LoginResponse](l.client).
+		Endpoint("login").
+		Body(req).
+		Post()
 	if err != nil {
 		return err
 	}
@@ -72,7 +77,8 @@ func (l *LoginLogic) RequestLogin(uid string) error {
 	successCount := len(res.SuccessUids)
 	failCount := len(res.FailUids)
 
-	token := ""
+	var userEntity *entity.User
+	var token string = ""
 
 	if successCount == 0 && failCount == 0 {
 		return shared.ToError(login.LOGIN_LOGIN_UNABLE)
@@ -84,20 +90,24 @@ func (l *LoginLogic) RequestLogin(uid string) error {
 		}
 	} else if successCount > 0 {
 		for _, successUid := range res.SuccessUids {
-			if successUid.Uid == uid {
+			if successUid.UserEntity.Uid == uid {
+				userEntity = successUid.UserEntity
 				token = successUid.Token
 				break
 			}
 		}
 	}
 
-	if token == "" {
+	if userEntity == nil || token == "" {
 		return shared.ToError(login.LOGIN_UNKOWN_ERROR)
 	}
 
-	if err := l.userLogicHandler.ConnectUser(uid, token); err != nil {
+	u, err := l.userLogicHandler.ConnectUser(userEntity, token)
+	if err != nil {
 		return err
 	}
+
+	command.RegisterCommands(l.client, u)
 
 	log.Info().Msgf("로그인 성공: %s, 토큰: %s", uid, token)
 
