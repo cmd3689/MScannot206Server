@@ -201,11 +201,11 @@ func (r *UserMongoRepository) CreateCharacters(ctx context.Context, infos []*Use
 		}
 	}
 
-	for uid, _ := range failedUids {
+	for uid := range failedUids {
 		delete(successInfos, uid)
 	}
 
-	newCharModels := make([]mongo.WriteModel, len(successInfos))
+	newCharModels := make([]mongo.WriteModel, 0, len(successInfos))
 	for _, info := range successInfos {
 		update := bson.D{
 			{Key: "$push", Value: bson.D{
@@ -219,13 +219,13 @@ func (r *UserMongoRepository) CreateCharacters(ctx context.Context, infos []*Use
 			{Key: "uid", Value: info.Uid},
 		}
 
-		opts := mongo.NewUpdateOneModel().SetFilter(filter).SetUpdate(update).SetUpsert(false)
-		newCharModels = append(newCharModels, opts)
+		newCharModels = append(newCharModels, mongo.NewUpdateOneModel().SetFilter(filter).SetUpdate(update).SetUpsert(false))
 	}
 
 	removeCharNames := make([]string, 0, len(failedUids))
 	removeCharNameModels := make([]mongo.WriteModel, 0, len(failedUids))
 
+	var errException error
 	if len(newCharModels) > 0 {
 		_, err = r.user.BulkWrite(ctx, newCharModels, options.BulkWrite().SetOrdered(false))
 		if err != nil {
@@ -252,6 +252,16 @@ func (r *UserMongoRepository) CreateCharacters(ctx context.Context, infos []*Use
 					delete(successInfos, uid)
 				}
 			} else {
+				// 기타 오류가 발생하였음으로 생성한 캐릭터 이름을 전부 삭제 요청
+				errException = err
+				for _, info := range successInfos {
+					removeCharNames = append(removeCharNames, info.Name)
+
+					opts := mongo.NewDeleteOneModel().SetFilter(bson.D{
+						{Key: "_id", Value: info.Name},
+					})
+					removeCharNameModels = append(removeCharNameModels, opts)
+				}
 				return nil, nil, err
 			}
 		}
@@ -270,15 +280,19 @@ func (r *UserMongoRepository) CreateCharacters(ctx context.Context, infos []*Use
 		}
 	}
 
+	if errException != nil {
+		return nil, nil, errException
+	}
+
 	fail := make([]string, 0, len(failedUids))
-	for uid, _ := range failedUids {
+	for uid := range failedUids {
 		fail = append(fail, uid)
 	}
 
 	success := make([]string, 0, len(successInfos))
-	for uid, _ := range successInfos {
+	for uid := range successInfos {
 		success = append(success, uid)
 	}
 
-	return fail, success, nil
+	return success, fail, nil
 }

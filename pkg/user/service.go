@@ -38,8 +38,8 @@ type UserService struct {
 }
 
 func (s *UserService) Init() error {
-	s.router.HandleFunc("/character/create", s.onCreateCharacter)
-	s.router.HandleFunc("/character/create/check_name", s.onCheckCharacterName)
+	s.router.HandleFunc("/user/character/create", s.onCreateCharacter)
+	s.router.HandleFunc("/user/character/create/check_name", s.onCheckCharacterName)
 
 	return nil
 }
@@ -119,6 +119,8 @@ func (s *UserService) onCreateCharacter(w http.ResponseWriter, r *http.Request) 
 			ErrorCode: session.SESSION_TOKEN_INVALID_ERROR,
 		})
 	}
+
+	// TODO: 캐릭터 최대 슬롯 수 판별
 
 	userCreateInfos := make([]*UserCreateCharacterInfo, 0, len(createInfos))
 	for _, info := range createInfos {

@@ -56,7 +56,7 @@ func (l *UserLogic) ConnectUser(userEntity *entity.User, token string) (*User, e
 	}
 	u.Characters = make([]*character.Character, 0, len(userEntity.Characters))
 	for _, entry := range userEntity.Characters {
-		ch, err := character.NewCharacter(entry.Key, entry.Name)
+		ch, err := character.NewCharacter(entry.Slot, entry.Name)
 		if err != nil {
 			errs = errors.Join(errs, err)
 			continue

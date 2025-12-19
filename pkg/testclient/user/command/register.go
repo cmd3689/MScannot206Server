@@ -2,6 +2,7 @@ package command
 
 import (
 	"MScannot206/pkg/testclient/framework"
+	"MScannot206/pkg/testclient/user/characterselection/create"
 	"MScannot206/pkg/testclient/user/characterselection/list"
 	"MScannot206/pkg/testclient/user/handler"
 	"errors"
@@ -26,6 +27,12 @@ func RegisterCommands(client framework.Client, userHandler handler.UserHandler) 
 		log.Err(err)
 	}
 
+	characterCreateCmd, err := create.NewCharacterCreateCommand(client, userHandler)
+	if err != nil {
+		errs = errors.Join(errs, err)
+		log.Err(err)
+	}
+
 	if errs != nil {
 		return errs
 	}
@@ -33,6 +40,7 @@ func RegisterCommands(client framework.Client, userHandler handler.UserHandler) 
 	errs = nil
 	for _, cmd := range []framework.ClientCommand{
 		characterListCmd,
+		characterCreateCmd,
 	} {
 		if err := userHandler.AddCommand(cmd); err != nil {
 			return err

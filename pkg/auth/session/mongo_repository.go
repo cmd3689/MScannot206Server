@@ -77,7 +77,7 @@ func (r *SessionRepository) SaveUserSessions(ctx context.Context, sessions []*en
 		session.UpdatedAt = time.Now().UTC()
 
 		filter := bson.D{
-			{Key: "uid", Value: session.Uid},
+			{Key: "_id", Value: session.Uid},
 		}
 
 		update := bson.D{
@@ -123,7 +123,7 @@ func (r *SessionRepository) ValidateUserSessions(ctx context.Context, sessions [
 	}
 
 	filter := bson.M{
-		"uid:": bson.M{"$in": targetUids},
+		"_id": bson.M{"$in": targetUids},
 	}
 
 	cursor, err := r.session.Find(ctx, filter)

@@ -7,15 +7,15 @@ import (
 
 var ErrCharacterSlotIsFull = errors.New("캐릭터 슬롯이 가득 찼습니다")
 
-func NewCharacter(key int, name string) *Character {
+func NewCharacter(slot int, name string) *Character {
 	return &Character{
-		Key:  key,
+		Slot: slot,
 		Name: name,
 	}
 }
 
 type Character struct {
-	Key  int    `json:"key" bson:"key"`
+	Slot int    `json:"slot" bson:"slot"`
 	Name string `json:"name" bson:"name"`
 }
 
