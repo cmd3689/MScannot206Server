@@ -106,7 +106,7 @@ func (l *UserLogic) RequestCheckCharacterName(uid string, name string) error {
 	}
 
 	req := &user.CheckCharacterNameRequest{
-		Requests: []user.UserNameCheckInfo{
+		Requests: []*user.UserNameCheckInfo{
 			{
 				Uid:   u.Uid,
 				Token: u.Token,
@@ -125,7 +125,7 @@ func (l *UserLogic) RequestCheckCharacterName(uid string, name string) error {
 	}
 
 	if len(res.Responses) == 0 {
-		return shared.ToError(user.USER_CHECK_CHARACTER_NAME_UNKOWN_ERROR)
+		return shared.ToError(user.USER_CHECK_CHARACTER_NAME_UNKNOWN_ERROR)
 	}
 
 	var available bool = false
@@ -161,7 +161,7 @@ func (l *UserLogic) RequestCreateCharacter(uid string, slot int, name string) er
 	}
 
 	req := &user.CreateCharacterRequest{
-		Requests: []user.UserCreateCharacterInfo{
+		Requests: []*user.UserCreateCharacterInfo{
 			{
 				Uid:   u.Uid,
 				Token: u.Token,
@@ -181,10 +181,10 @@ func (l *UserLogic) RequestCreateCharacter(uid string, slot int, name string) er
 	}
 
 	if len(res.Responses) == 0 {
-		return shared.ToError(user.USER_CREATE_CHARACTER_UNKOWN_ERROR)
+		return shared.ToError(user.USER_CREATE_CHARACTER_UNKNOWN_ERROR)
 	}
 
-	var errorCode string = user.USER_CREATE_CHARACTER_UNKOWN_ERROR
+	var errorCode string = user.USER_CREATE_CHARACTER_UNKNOWN_ERROR
 	for _, resp := range res.Responses {
 		if resp.Uid == uid && resp.Slot == slot {
 			errorCode = resp.ErrorCode

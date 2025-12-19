@@ -1,10 +1,7 @@
 package login
 
 import (
-	"MScannot206/pkg/serverinfo"
-	"MScannot206/pkg/user"
 	"MScannot206/shared/entity"
-	"MScannot206/shared/repository"
 	"MScannot206/shared/server"
 	"MScannot206/shared/service"
 	"encoding/json"
@@ -36,43 +33,15 @@ type LoginService struct {
 	host   service.ServiceHost
 	router *http.ServeMux
 
-	userRepo repository.UserRepository
+	userRepoHandler UserRepositoryHandler
 
 	authServiceHandler AuthServiceHandler
 }
 
-func (s *LoginService) GetPriority() int {
-	return 0
-}
-
 func (s *LoginService) Init() error {
-	var errs error
-	var err error
-	var gameDBName string = ""
-
 	s.router.HandleFunc("/login", s.onLogin)
 
-	serverInfoService, err := service.GetService[*serverinfo.ServerInfoService](s.host)
-	if err != nil {
-		log.Err(err)
-		errs = errors.Join(errs, err)
-	} else {
-		srvInfo, err := serverInfoService.GetInfo()
-		if err != nil {
-			log.Err(err)
-			errs = errors.Join(errs, err)
-		} else {
-			gameDBName = srvInfo.GameDBName
-		}
-	}
-
-	s.userRepo, err = user.NewUserRepository(s.host.GetMongoClient(), gameDBName)
-	if err != nil {
-		log.Err(err)
-		errs = errors.Join(errs, err)
-	}
-
-	return errs
+	return nil
 }
 
 func (s *LoginService) Start() error {
@@ -96,6 +65,19 @@ func (s *LoginService) SetHandlers(
 	return errs
 }
 
+func (s *LoginService) SetRepositories(
+	userRepo UserRepositoryHandler,
+) error {
+	var errs error
+
+	s.userRepoHandler = userRepo
+	if userRepo == nil {
+		errs = errors.Join(errs, ErrUserRepositoryHandlerIsNil)
+	}
+
+	return errs
+}
+
 func (s *LoginService) onLogin(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
@@ -106,13 +88,13 @@ func (s *LoginService) onLogin(w http.ResponseWriter, r *http.Request) {
 
 	var req LoginRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "Bad Request", http.StatusBadRequest)
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	var response LoginResponse
+	var res LoginResponse
 
-	users, newUids, err := s.userRepo.FindUserByUids(ctx, req.Uids)
+	users, newUids, err := s.userRepoHandler.FindUserByUids(ctx, req.Uids)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -120,22 +102,28 @@ func (s *LoginService) onLogin(w http.ResponseWriter, r *http.Request) {
 
 	// 신규 유저 생성
 	if len(newUids) > 0 {
-		newUsers, err := s.userRepo.InsertUserByUids(ctx, newUids)
+		newUsers, failedUids, err := s.userRepoHandler.InsertUserByUids(ctx, newUids)
 		if err != nil {
 			// 신규 유저는 로그인 불가
 			log.Printf("신규 유저 생성 불가: %v", err)
 
 			for _, uid := range newUids {
-				reason := LoginFailure{
+				reason := &LoginFailure{
 					Uid:       uid,
 					ErrorCode: LOGIN_DB_WRITE_ERROR,
 				}
-				response.FailUids = append(response.FailUids, reason)
+				res.FailUids = append(res.FailUids, reason)
 			}
-
-			// TODO: 생성 불가능한 유저 uid 로그 추가
 		} else {
 			users = append(users, newUsers...)
+
+			for _, uid := range failedUids {
+				reason := &LoginFailure{
+					Uid:       uid,
+					ErrorCode: LOGIN_DB_WRITE_ERROR,
+				}
+				res.FailUids = append(res.FailUids, reason)
+			}
 		}
 	}
 
@@ -152,28 +140,28 @@ func (s *LoginService) onLogin(w http.ResponseWriter, r *http.Request) {
 
 	for _, session := range sessions {
 		if u, ok := usersByUid[session.Uid]; ok {
-			success := LoginSuccess{
+			success := &LoginSuccess{
 				UserEntity: u,
 				Token:      session.Token,
 			}
-			response.SuccessUids = append(response.SuccessUids, success)
+			res.SuccessUids = append(res.SuccessUids, success)
 		} else {
 			log.Warn().Msgf("세션은 존재하나 유저가 없음: %s", session.Uid)
 		}
 	}
 
 	for _, u := range failureUsers {
-		reason := LoginFailure{
+		reason := &LoginFailure{
 			Uid:       u.Uid,
 			ErrorCode: LOGIN_SESSION_CREATE_ERROR,
 		}
-		response.FailUids = append(response.FailUids, reason)
+		res.FailUids = append(res.FailUids, reason)
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 
-	if err := json.NewEncoder(w).Encode(response); err != nil {
+	if err := json.NewEncoder(w).Encode(res); err != nil {
 		log.Err(err)
 	}
 }

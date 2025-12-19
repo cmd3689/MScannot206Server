@@ -1,14 +1,13 @@
 package user
 
 import (
-	"MScannot206/pkg/serverinfo"
-	"MScannot206/shared/repository"
+	"MScannot206/pkg/auth/session"
+	"MScannot206/shared/entity"
 	"MScannot206/shared/server"
 	"MScannot206/shared/service"
+	"encoding/json"
 	"errors"
 	"net/http"
-
-	"github.com/rs/zerolog/log"
 )
 
 func NewUserService(
@@ -33,38 +32,16 @@ type UserService struct {
 	host   service.ServiceHost
 	router *http.ServeMux
 
-	userRepo repository.UserRepository
-}
+	userRepo *UserMongoRepository
 
-func (s *UserService) GetPriority() int {
-	return 0
+	authServiceHandler AuthServiceHandler
 }
 
 func (s *UserService) Init() error {
-	var errs error
-	var err error
-	var gameDBName string = ""
+	s.router.HandleFunc("/character/create", s.onCreateCharacter)
+	s.router.HandleFunc("/character/create/check_name", s.onCheckCharacterName)
 
-	serverInfoService, err := service.GetService[*serverinfo.ServerInfoService](s.host)
-	if err != nil {
-		log.Err(err)
-		errs = errors.Join(errs, err)
-	} else {
-		srvInfo, err := serverInfoService.GetInfo()
-		if err != nil {
-			log.Err(err)
-			errs = errors.Join(errs, err)
-		} else {
-			gameDBName = srvInfo.GameDBName
-		}
-	}
-
-	s.userRepo, err = NewUserRepository(s.host.GetMongoClient(), gameDBName)
-	if err != nil {
-		return err
-	}
-
-	return errs
+	return nil
 }
 
 func (s *UserService) Start() error {
@@ -73,4 +50,191 @@ func (s *UserService) Start() error {
 
 func (s *UserService) Stop() error {
 	return nil
+}
+
+func (s *UserService) SetHandlers(
+	authServiceHandler AuthServiceHandler,
+) error {
+	var errs error
+
+	s.authServiceHandler = authServiceHandler
+	if authServiceHandler == nil {
+		errs = errors.Join(errs, ErrAuthServiceHandlerIsNil)
+	}
+
+	return errs
+}
+
+func (s *UserService) SetRepositories(
+	userRepo *UserMongoRepository,
+) error {
+	var errs error
+
+	s.userRepo = userRepo
+	if userRepo == nil {
+		errs = errors.Join(errs, ErrUserMongoRepositoryIsNil)
+	}
+
+	return errs
+}
+
+func (s *UserService) onCreateCharacter(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	if r.Method != http.MethodPost {
+		http.Error(w, "Invalid request method", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req CreateCharacterRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	var res CreateCharacterResponse
+
+	requestCount := len(req.Requests)
+	sessions := make([]*entity.UserSession, 0, requestCount)
+	createInfos := make(map[string]*UserCreateCharacterInfo, requestCount)
+	for _, entry := range req.Requests {
+		s := &entity.UserSession{
+			Uid:   entry.Uid,
+			Token: entry.Token,
+		}
+		sessions = append(sessions, s)
+		createInfos[entry.Uid] = entry
+	}
+
+	_, invalidUids, err := s.authServiceHandler.ValidateUserSessions(ctx, sessions)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	for _, uid := range invalidUids {
+		delete(createInfos, uid)
+		res.Responses = append(res.Responses, &UserCreateCharacterResult{
+			Uid:       uid,
+			ErrorCode: session.SESSION_TOKEN_INVALID_ERROR,
+		})
+	}
+
+	userCreateInfos := make([]*UserCreateCharacterInfo, 0, len(createInfos))
+	for _, info := range createInfos {
+		userCreateInfos = append(userCreateInfos, info)
+	}
+
+	successUids, failedUids, err := s.userRepo.CreateCharacters(ctx, userCreateInfos)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	for _, uid := range successUids {
+		res.Responses = append(res.Responses, &UserCreateCharacterResult{
+			Uid:       uid,
+			Slot:      createInfos[uid].Slot,
+			ErrorCode: "",
+		})
+	}
+
+	for _, uid := range failedUids {
+		// 통상적으로 여기까지 오면 캐릭터 이름 중복 오류일 것이라 가정
+		res.Responses = append(res.Responses, &UserCreateCharacterResult{
+			Uid:       uid,
+			Slot:      createInfos[uid].Slot,
+			ErrorCode: USER_CHARACTER_NAME_ALREADY_EXISTS_ERROR,
+		})
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+
+	if err := json.NewEncoder(w).Encode(&res); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
+func (s *UserService) onCheckCharacterName(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	if r.Method != http.MethodPost {
+		http.Error(w, "Invalid request method", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req CheckCharacterNameRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	var res CheckCharacterNameResponse
+
+	requestCount := len(req.Requests)
+	sessions := make([]*entity.UserSession, 0, requestCount)
+	nameCheckInfos := make(map[string]*UserNameCheckInfo, requestCount)
+	for _, entry := range req.Requests {
+		s := &entity.UserSession{
+			Uid:   entry.Uid,
+			Token: entry.Token,
+		}
+		sessions = append(sessions, s)
+		nameCheckInfos[entry.Uid] = entry
+	}
+
+	_, invalidUids, err := s.authServiceHandler.ValidateUserSessions(ctx, sessions)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	for _, uid := range invalidUids {
+		delete(nameCheckInfos, uid)
+		res.Responses = append(res.Responses, &UserNameCheckResult{
+			Uid:       uid,
+			Available: false,
+			ErrorCode: session.SESSION_TOKEN_INVALID_ERROR,
+		})
+	}
+
+	chNames := make([]string, 0, len(nameCheckInfos))
+	for _, info := range nameCheckInfos {
+		chNames = append(chNames, info.Name)
+	}
+
+	existsMap, err := s.userRepo.ExistsCharacterNames(ctx, chNames)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	for _, info := range nameCheckInfos {
+		exists, ok := existsMap[info.Name]
+
+		var ret *UserNameCheckResult
+		if ok && exists {
+			ret = &UserNameCheckResult{
+				Uid:       info.Uid,
+				Available: false,
+				ErrorCode: USER_CHARACTER_NAME_ALREADY_EXISTS_ERROR,
+			}
+		} else {
+			ret = &UserNameCheckResult{
+				Uid:       info.Uid,
+				Available: true,
+				ErrorCode: "",
+			}
+		}
+
+		res.Responses = append(res.Responses, ret)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+
+	if err := json.NewEncoder(w).Encode(&res); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
 }

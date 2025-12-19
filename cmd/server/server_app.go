@@ -2,6 +2,7 @@ package main
 
 import (
 	"MScannot206/pkg/auth"
+	"MScannot206/pkg/auth/session"
 	"MScannot206/pkg/login"
 	"MScannot206/pkg/serverinfo"
 	"MScannot206/pkg/user"
@@ -18,6 +19,8 @@ import (
 	"syscall"
 
 	"github.com/rs/zerolog/log"
+	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 func loadDefaultConfig(executablePath string, defaultFileName string, cfg interface{}) {
@@ -101,8 +104,55 @@ func setupServices(server *server.WebServer, cfg *config.WebServerConfig) error 
 		return errs
 	}
 
+	gameDBName, err := serverInfo_service.GetGameDBName()
+	if err != nil {
+		errs = errors.Join(errs, err)
+		log.Error().Err(err).Msg("게임 DB 이름 조회 오류")
+	}
+
+	sessionRepo, err := session.NewSessionRepository(server.GetContext(), server.GetMongoClient(), gameDBName)
+	if err != nil {
+		errs = errors.Join(errs, err)
+		log.Error().Err(err).Msg("세션 레포지토리 생성 오류")
+	}
+
+	userRepo, err := user.NewUserMongoRepository(server.GetMongoClient(), gameDBName)
+	if err != nil {
+		errs = errors.Join(errs, err)
+		log.Error().Err(err).Msg("유저 레포지토리 생성 오류")
+	}
+
 	// Register Handlers
-	login_service.SetHandlers(auth_service)
+	errs = nil
+
+	if err := auth_service.SetRepositories(sessionRepo); err != nil {
+		errs = errors.Join(errs, err)
+		log.Error().Err(err).Msg("인증 서비스 레포지토리 설정 오류")
+	}
+
+	if err := login_service.SetHandlers(auth_service); err != nil {
+		errs = errors.Join(errs, err)
+		log.Error().Err(err).Msg("로그인 서비스 핸들러 설정 오류")
+	}
+
+	if err := login_service.SetRepositories(userRepo); err != nil {
+		errs = errors.Join(errs, err)
+		log.Error().Err(err).Msg("로그인 서비스 레포지토리 설정 오류")
+	}
+
+	if err := user_service.SetHandlers(auth_service); err != nil {
+		errs = errors.Join(errs, err)
+		log.Error().Err(err).Msg("유저 서비스 핸들러 설정 오류")
+	}
+
+	if err := user_service.SetRepositories(userRepo); err != nil {
+		errs = errors.Join(errs, err)
+		log.Error().Err(err).Msg("유저 서비스 레포지토리 설정 오류")
+	}
+
+	if errs != nil {
+		return errs
+	}
 
 	// Add Services
 	errs = nil
@@ -122,9 +172,18 @@ func setupServices(server *server.WebServer, cfg *config.WebServerConfig) error 
 }
 
 func run(ctx context.Context, cfg *config.WebServerConfig) error {
+	opts := options.Client().ApplyURI(cfg.MongoUri)
+	mongoClient, err := mongo.Connect(ctx, opts)
+	if err != nil {
+		log.Err(err).Msgf("MongoDB 연결에 실패하였습니다. [uri:%v]", cfg.MongoUri)
+		return err
+	}
+	log.Info().Msgf("MongoDB 연결 완료이 완료되었습니다. [uri:%v]", cfg.MongoUri)
+
 	web_server, err := server.NewWebServer(
 		ctx,
 		cfg,
+		mongoClient,
 	)
 
 	if err != nil {
@@ -158,13 +217,13 @@ func run(ctx context.Context, cfg *config.WebServerConfig) error {
 
 	select {
 	case <-sigCh:
-		log.Printf("서버 강제 종료")
+		log.Info().Msg("서버가 강제종료 되었습니다.")
 
 	case <-web_server.GetContext().Done():
-		log.Printf("서버 종료")
+		log.Info().Msg("서버가 종료되었습니다.")
 
 	case err := <-serverErrCh:
-		log.Err(err).Msg("치명적 서버 오류 발생")
+		log.Err(err).Msg("치명적 서버 오류 발생가 발생하였습니다.")
 		return err
 	}
 

@@ -6,40 +6,26 @@ import (
 )
 
 func NewServerInfoService(host service.ServiceHost, serverName, dbName string) (*ServerInfoService, error) {
+	var err error
+
 	if host == nil {
 		return nil, errors.New("service host is nil")
 	}
 
-	return &ServerInfoService{
+	s := &ServerInfoService{
 		host:       host,
 		serverName: serverName,
 		dbName:     dbName,
-	}, nil
-}
-
-type ServerInfoService struct {
-	host       service.ServiceHost
-	serverName string
-	dbName     string
-
-	serverInfoRepo *ServerInfoRepository
-}
-
-func (s *ServerInfoService) GetPriority() int {
-	return 0
-}
-
-func (s *ServerInfoService) Init() error {
-	var err error
+	}
 
 	s.serverInfoRepo, err = NewServerInfoRepository(s.host.GetMongoClient(), s.dbName)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	info, err := s.serverInfoRepo.GetInfo(s.host.GetContext(), s.serverName)
 	if err != nil {
-		return err
+		return nil, err
 	} else if info == nil {
 		info = &ServerInfo{
 			Name: s.serverName,
@@ -53,10 +39,22 @@ func (s *ServerInfoService) Init() error {
 		}
 
 		if err := s.serverInfoRepo.SetInfo(s.host.GetContext(), info); err != nil {
-			return err
+			return nil, err
 		}
 	}
 
+	return s, nil
+}
+
+type ServerInfoService struct {
+	host       service.ServiceHost
+	serverName string
+	dbName     string
+
+	serverInfoRepo *ServerInfoRepository
+}
+
+func (s *ServerInfoService) Init() error {
 	return nil
 }
 
@@ -70,4 +68,23 @@ func (s *ServerInfoService) Stop() error {
 
 func (s *ServerInfoService) GetInfo() (*ServerInfo, error) {
 	return s.serverInfoRepo.GetInfo(s.host.GetContext(), s.serverName)
+}
+
+func (s *ServerInfoService) GetGameDBName() (string, error) {
+	info, err := s.GetInfo()
+	if err != nil {
+		return "", err
+	}
+
+	return info.GameDBName, nil
+}
+
+func (s *ServerInfoService) GetLogDBName() (string, error) {
+	info, err := s.GetInfo()
+
+	if err != nil {
+		return "", err
+	}
+
+	return info.LogDBName, nil
 }

@@ -7,7 +7,7 @@ type UserNameCheckInfo struct {
 }
 
 type CheckCharacterNameRequest struct {
-	Requests []UserNameCheckInfo `json:"requests"`
+	Requests []*UserNameCheckInfo `json:"requests"`
 }
 
 type UserCreateCharacterInfo struct {
@@ -18,5 +18,5 @@ type UserCreateCharacterInfo struct {
 }
 
 type CreateCharacterRequest struct {
-	Requests []UserCreateCharacterInfo `json:"requests"`
+	Requests []*UserCreateCharacterInfo `json:"requests"`
 }

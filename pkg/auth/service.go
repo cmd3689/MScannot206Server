@@ -2,9 +2,7 @@ package auth
 
 import (
 	"MScannot206/pkg/auth/session"
-	"MScannot206/pkg/serverinfo"
 	"MScannot206/shared/entity"
-	"MScannot206/shared/repository"
 	"MScannot206/shared/service"
 	"context"
 	"crypto/rand"
@@ -29,38 +27,11 @@ func NewAuthService(
 type AuthService struct {
 	host service.ServiceHost
 
-	sessionRepo repository.SessionRepository
-}
-
-func (s *AuthService) GetPriority() int {
-	return 0
+	sessionRepo *session.SessionRepository
 }
 
 func (s *AuthService) Init() error {
-	var errs error
-	var err error
-	var gameDBName string = ""
-
-	serverInfoService, err := service.GetService[*serverinfo.ServerInfoService](s.host)
-	if err != nil {
-		log.Err(err)
-		errs = errors.Join(errs, err)
-	} else {
-		srvInfo, err := serverInfoService.GetInfo()
-		if err != nil {
-			log.Err(err)
-			errs = errors.Join(errs, err)
-		} else {
-			gameDBName = srvInfo.GameDBName
-		}
-	}
-
-	s.sessionRepo, err = session.NewSessionRepository(s.host.GetContext(), s.host.GetMongoClient(), gameDBName)
-	if err != nil {
-		return err
-	}
-
-	return errs
+	return nil
 }
 
 func (s *AuthService) Start() error {
@@ -71,7 +42,20 @@ func (s *AuthService) Stop() error {
 	return nil
 }
 
-func generateToken() (string, error) {
+func (s *AuthService) SetRepositories(
+	sessionRepo *session.SessionRepository,
+) error {
+	var errs error
+
+	s.sessionRepo = sessionRepo
+	if sessionRepo == nil {
+		errs = errors.Join(errs, session.ErrSessionRepositoryIsNil)
+	}
+
+	return errs
+}
+
+func (s *AuthService) generateToken() (string, error) {
 	b := make([]byte, 32)
 	_, err := rand.Read(b)
 	if err != nil {
@@ -85,7 +69,7 @@ func (s *AuthService) CreateUserSessions(ctx context.Context, user []*entity.Use
 	failureUsers := make([]*entity.User, 0)
 
 	for _, u := range user {
-		token, err := generateToken()
+		token, err := s.generateToken()
 		if err != nil {
 			log.Warn().Err(err)
 			continue
@@ -105,4 +89,8 @@ func (s *AuthService) CreateUserSessions(ctx context.Context, user []*entity.Use
 	}
 
 	return sessions, failureUsers, nil
+}
+
+func (s *AuthService) ValidateUserSessions(ctx context.Context, sessions []*entity.UserSession) ([]string, []string, error) {
+	return s.sessionRepo.ValidateUserSessions(ctx, sessions)
 }

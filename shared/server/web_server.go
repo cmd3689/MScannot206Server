@@ -7,13 +7,10 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"sort"
-	"sync"
 	"time"
 
 	"github.com/rs/zerolog/log"
 	"go.mongodb.org/mongo-driver/mongo"
-	mongo_options "go.mongodb.org/mongo-driver/mongo/options"
 )
 
 var ErrServeMuxIsNil = errors.New("serve mux is null")
@@ -21,6 +18,7 @@ var ErrServeMuxIsNil = errors.New("serve mux is null")
 func NewWebServer(
 	ctx context.Context,
 	cfg *config.WebServerConfig,
+	mongoClient *mongo.Client,
 ) (*WebServer, error) {
 	ctxWithCancel, cancel := context.WithCancel(ctx)
 
@@ -33,6 +31,10 @@ func NewWebServer(
 		}
 	}
 
+	if mongoClient == nil {
+		return nil, errors.New("mongo client is null")
+	}
+
 	server := &WebServer{
 		ctx:        ctxWithCancel,
 		cancelFunc: cancel,
@@ -41,6 +43,8 @@ func NewWebServer(
 
 		router:   http.NewServeMux(),
 		services: make([]service.Service, 0),
+
+		mongoClient: mongoClient,
 	}
 
 	return server, nil
@@ -77,51 +81,6 @@ func (s WebServer) GetMongoClient() *mongo.Client {
 
 func (s *WebServer) Init() error {
 	var errs error
-	var wg sync.WaitGroup
-	taskCh := make(chan error, 1)
-	tasks := []func(context.Context, chan error){
-		s.connectMongoTask(&wg, taskCh),
-	}
-
-	for _, task := range tasks {
-		wg.Add(1)
-		go task(s.ctx, taskCh)
-	}
-
-	allDone := make(chan struct{})
-	go func() {
-		wg.Wait()
-		close(allDone)
-	}()
-
-Loop:
-	for {
-		select {
-		case taskErr := <-taskCh:
-			if taskErr != nil {
-				errs = errors.Join(errs, taskErr)
-				log.Err(taskErr).Msg("초기화 중 에러가 발생하였습니다.")
-			}
-
-		case <-allDone:
-			log.Info().Msg("초기화 작업이 완료되었습니다.")
-			break Loop
-
-		case <-s.ctx.Done():
-			log.Info().Msg("서버 Context 취소되었습니다., 초기화 작업을 중단합니다.")
-			return s.ctx.Err()
-		}
-	}
-
-	if errs != nil {
-		return errs
-	}
-
-	errs = nil
-
-	sort.Slice(s.services, func(i, j int) bool {
-		return s.services[i].GetPriority() > s.services[j].GetPriority()
-	})
 
 	for _, svc := range s.services {
 		if err := svc.Init(); err != nil {
@@ -188,28 +147,4 @@ func (s *WebServer) AddService(svc service.Service) error {
 
 	s.services = append(s.services, svc)
 	return nil
-}
-
-func (s *WebServer) connectMongoTask(
-	wg *sync.WaitGroup, taskCh chan error,
-) func(context.Context, chan error) {
-	return func(ctx context.Context, errCh chan error) {
-		defer wg.Done()
-
-		var err error
-
-		connectCtx, connectCancel := context.WithTimeout(ctx, 10*time.Second)
-		defer connectCancel()
-
-		opts := mongo_options.Client().ApplyURI(s.cfg.MongoUri)
-		s.mongoClient, err = mongo.Connect(connectCtx, opts)
-
-		if err != nil {
-			log.Err(err).Msgf("MongoDB 연결에 실패하였습니다. [uri:%v]", s.cfg.MongoUri)
-			taskCh <- err
-			return
-		}
-
-		log.Info().Msgf("MongoDB 연결 완료이 완료되었습니다. [uri:%v]", s.cfg.MongoUri)
-	}
 }

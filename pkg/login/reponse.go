@@ -13,6 +13,6 @@ type LoginFailure struct {
 }
 
 type LoginResponse struct {
-	SuccessUids []LoginSuccess `json:"success_uids"`
-	FailUids    []LoginFailure `json:"fail_uids"`
+	SuccessUids []*LoginSuccess `json:"success_uids"`
+	FailUids    []*LoginFailure `json:"fail_uids"`
 }

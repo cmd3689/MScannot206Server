@@ -7,15 +7,15 @@ type UserNameCheckResult struct {
 }
 
 type CheckCharacterNameResponse struct {
-	Responses []UserNameCheckResult `json:"responses"`
+	Responses []*UserNameCheckResult `json:"responses"`
 }
 
 type UserCreateCharacterResult struct {
 	Uid       string `json:"uid"`
-	Slot      int    `json:"slot"`
+	Slot      int    `json:"slot,omitempty"`
 	ErrorCode string `json:"error_code,omitempty"`
 }
 
 type CreateCharacterResponse struct {
-	Responses []UserCreateCharacterResult `json:"responses"`
+	Responses []*UserCreateCharacterResult `json:"responses"`
 }

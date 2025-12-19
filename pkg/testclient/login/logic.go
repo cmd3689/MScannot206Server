@@ -99,7 +99,7 @@ func (l *LoginLogic) RequestLogin(uid string) error {
 	}
 
 	if userEntity == nil || token == "" {
-		return shared.ToError(login.LOGIN_UNKOWN_ERROR)
+		return shared.ToError(login.LOGIN_UNKNOWN_ERROR)
 	}
 
 	u, err := l.userLogicHandler.ConnectUser(userEntity, token)

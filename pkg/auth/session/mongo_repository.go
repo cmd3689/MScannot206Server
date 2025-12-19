@@ -7,6 +7,7 @@ import (
 	"errors"
 	"time"
 
+	"github.com/rs/zerolog/log"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
@@ -14,6 +15,8 @@ import (
 
 // 7주일
 const expireAfterSeconds = 3600 * 24 * 7
+
+var ErrSessionRepositoryIsNil = errors.New("session repository is null")
 
 func NewSessionRepository(
 	ctx context.Context,
@@ -87,13 +90,66 @@ func (r *SessionRepository) SaveUserSessions(ctx context.Context, sessions []*en
 			SetUpsert(true)
 	}
 
-	if len(models) > 0 {
-		opts := options.BulkWrite().SetOrdered(false)
-		_, err := r.session.BulkWrite(ctx, models, opts)
-		if err != nil {
-			return err
+	_, err := r.session.BulkWrite(ctx, models, options.BulkWrite().SetOrdered(false))
+	if err != nil {
+		if bulkErr, ok := err.(mongo.BulkWriteException); ok {
+			log.Warn().Msg("일부 세션 저장에 실패했습니다")
+			for _, writeErr := range bulkErr.WriteErrors {
+				log.Warn().Msgf("세션 저장 실패: %v", writeErr.Message)
+			}
+			return nil
 		}
+		return err
 	}
 
 	return nil
+}
+
+func (r *SessionRepository) ValidateUserSessions(ctx context.Context, sessions []*entity.UserSession) ([]string, []string, error) {
+	if len(sessions) == 0 {
+		return []string{}, []string{}, nil
+	}
+
+	sessionCount := len(sessions)
+	validUids := make([]string, 0, sessionCount)
+	invalidUids := make([]string, 0, (sessionCount / 2))
+
+	targetUids := make([]string, 0, sessionCount)
+	inputSessionMap := make(map[string]string, sessionCount)
+
+	for _, s := range sessions {
+		targetUids = append(targetUids, s.Uid)
+		inputSessionMap[s.Uid] = s.Token
+	}
+
+	filter := bson.M{
+		"uid:": bson.M{"$in": targetUids},
+	}
+
+	cursor, err := r.session.Find(ctx, filter)
+	if err != nil {
+		return []string{}, []string{}, err
+	}
+	defer cursor.Close(ctx)
+
+	var dbSessions []*entity.UserSession
+	if err := cursor.All(ctx, &dbSessions); err != nil {
+		return []string{}, []string{}, err
+	}
+
+	dbSessionMap := make(map[string]*entity.UserSession, len(dbSessions))
+	for _, s := range dbSessions {
+		dbSessionMap[s.Uid] = s
+	}
+
+	for _, uid := range targetUids {
+		s, ok := dbSessionMap[uid]
+		if ok && s.Token == inputSessionMap[uid] {
+			validUids = append(validUids, uid)
+		} else {
+			invalidUids = append(invalidUids, uid)
+		}
+	}
+
+	return validUids, invalidUids, nil
 }
