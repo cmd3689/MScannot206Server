@@ -1,0 +1,3 @@
+app_name: server
+log_dir: server_logs
+debug_mode: true

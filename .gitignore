@@ -39,4 +39,9 @@ luac.out
 *.x86_64
 *.hex
 
-bin/
+bin/*
+# 특정 파일만 예외로 추적
+!bin/server_config.yaml
+!bin/server_log_config.yaml
+!bin/testclient_config.yaml
+!bin/testclient_log_config.yaml

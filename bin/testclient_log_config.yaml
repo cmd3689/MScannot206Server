@@ -1,0 +1,3 @@
+app_name: testclient
+log_dir: testclient_logs
+debug_mode: true

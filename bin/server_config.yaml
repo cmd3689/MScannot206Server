@@ -1,0 +1,6 @@
+port: 8080
+
+server_name: "DevServer"
+
+mongo_uri: "mongodb://localhost:27017/"
+mongo_env_db_name: "MSenv"
