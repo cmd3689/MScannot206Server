@@ -1,6 +1,7 @@
 package service
 
 import (
+	"MScannot206/shared/def"
 	"context"
 	"fmt"
 
@@ -18,6 +19,9 @@ type ServiceHost interface {
 
 	// DB
 	GetMongoClient() *mongo.Client
+
+	// ETC
+	GetLocale() def.Locale
 }
 
 func GetService[T Service](host ServiceHost) (T, error) {

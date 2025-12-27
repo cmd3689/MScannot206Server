@@ -6,9 +6,11 @@ import (
 	"MScannot206/shared/entity"
 	"MScannot206/shared/server"
 	"MScannot206/shared/service"
+	"MScannot206/shared/util"
 	"encoding/json"
 	"errors"
 	"net/http"
+	"unicode/utf8"
 )
 
 func NewUserService(
@@ -106,14 +108,40 @@ func (s *UserService) onCreateCharacter(w http.ResponseWriter, r *http.Request) 
 				Slot:      entry.Slot,
 				ErrorCode: USER_CHARACTER_SLOT_INVALID_ERROR,
 			})
-		} else {
-			s := &entity.UserSession{
-				Uid:   entry.Uid,
-				Token: entry.Token,
-			}
-			sessions = append(sessions, s)
-			createInfos[entry.Uid] = entry
+			continue
 		}
+
+		// 잘못된 이름 길이 검출
+		nameLen := utf8.RuneCountInString(entry.Name)
+		if nameLen < def.MinCharacterNameLength {
+			res.Responses = append(res.Responses, &UserCreateCharacterResult{
+				Uid:       entry.Uid,
+				Slot:      entry.Slot,
+				ErrorCode: USER_CREATE_CHARACTER_NAME_MIN_LENGTH_ERROR,
+			})
+			continue
+		} else if nameLen > def.MaxCharacterNameLength {
+			res.Responses = append(res.Responses, &UserCreateCharacterResult{
+				Uid:       entry.Uid,
+				Slot:      entry.Slot,
+				ErrorCode: USER_CREATE_CHARACTER_NAME_MAX_LENGTH_ERROR,
+			})
+			continue
+		} else if util.HasSpecialChar(entry.Name, s.host.GetLocale()) {
+			res.Responses = append(res.Responses, &UserCreateCharacterResult{
+				Uid:       entry.Uid,
+				Slot:      entry.Slot,
+				ErrorCode: USER_CREATE_CHARACTER_NAME_SPECIAL_CHAR_ERROR,
+			})
+			continue
+		}
+
+		s := &entity.UserSession{
+			Uid:   entry.Uid,
+			Token: entry.Token,
+		}
+		sessions = append(sessions, s)
+		createInfos[entry.Uid] = entry
 	}
 
 	_, invalidUids, err := s.authServiceHandler.ValidateUserSessions(ctx, sessions)
@@ -137,6 +165,7 @@ func (s *UserService) onCreateCharacter(w http.ResponseWriter, r *http.Request) 
 		}
 		return uids
 	}())
+
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -213,6 +242,31 @@ func (s *UserService) onCheckCharacterName(w http.ResponseWriter, r *http.Reques
 	sessions := make([]*entity.UserSession, 0, requestCount)
 	nameCheckInfos := make(map[string]*UserNameCheckInfo, requestCount)
 	for _, entry := range req.Requests {
+		// 잘못된 이름 길이 검출
+		nameLen := utf8.RuneCountInString(entry.Name)
+		if nameLen < def.MinCharacterNameLength {
+			res.Responses = append(res.Responses, &UserNameCheckResult{
+				Uid:       entry.Uid,
+				Available: false,
+				ErrorCode: USER_CREATE_CHARACTER_NAME_MIN_LENGTH_ERROR,
+			})
+			continue
+		} else if nameLen > def.MaxCharacterNameLength {
+			res.Responses = append(res.Responses, &UserNameCheckResult{
+				Uid:       entry.Uid,
+				Available: false,
+				ErrorCode: USER_CREATE_CHARACTER_NAME_MAX_LENGTH_ERROR,
+			})
+			continue
+		} else if util.HasSpecialChar(entry.Name, s.host.GetLocale()) {
+			res.Responses = append(res.Responses, &UserNameCheckResult{
+				Uid:       entry.Uid,
+				Available: false,
+				ErrorCode: USER_CREATE_CHARACTER_NAME_SPECIAL_CHAR_ERROR,
+			})
+			continue
+		}
+
 		s := &entity.UserSession{
 			Uid:   entry.Uid,
 			Token: entry.Token,

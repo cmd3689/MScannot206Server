@@ -1,6 +1,10 @@
 package user
 
-import "MScannot206/shared"
+import (
+	"MScannot206/shared"
+	"MScannot206/shared/def"
+	"fmt"
+)
 
 const USER_CHECK_CHARACTER_NAME_UNKNOWN_ERROR = "USER_CHECK_CHARACTER_NAME_UNKNOWN_ERROR"
 const USER_CHARACTER_NAME_ALREADY_EXISTS_ERROR = "USER_CHARACTER_NAME_ALREADY_EXISTS_ERROR"
@@ -9,11 +13,23 @@ const USER_CREATE_CHARACTER_UNKNOWN_ERROR = "USER_CREATE_CHARACTER_UNKNOWN_ERROR
 const USER_CHARACTER_SLOT_INVALID_ERROR = "USER_CHARACTER_SLOT_INVALID_ERROR"
 const USER_CHARACTER_SLOT_ALREADY_EXISTS_ERROR = "USER_CHARACTER_SLOT_ALREADY_EXISTS_ERROR"
 
-func init() {
-	shared.RegisterError(USER_CHECK_CHARACTER_NAME_UNKNOWN_ERROR, "캐릭터 이름 확인 중 알 수 없는 오류")
-	shared.RegisterError(USER_CHARACTER_NAME_ALREADY_EXISTS_ERROR, "이미 존재하는 캐릭터 이름입니다.")
+const USER_CREATE_CHARACTER_ALREADY_REQUEST = "USER_CREATE_CHARACTER_ALREADY_REQUEST"
+const USER_CREATE_CHARACTER_USER_NOT_FOUND = "USER_CREATE_CHARACTER_USER_NOT_FOUND"
+const USER_CREATE_CHARACTER_NAME_MIN_LENGTH_ERROR = "USER_CREATE_CHARACTER_NAME_MIN_LENGTH_ERROR"
+const USER_CREATE_CHARACTER_NAME_MAX_LENGTH_ERROR = "USER_CREATE_CHARACTER_NAME_MAX_LENGTH_ERROR"
+const USER_CREATE_CHARACTER_NAME_SPECIAL_CHAR_ERROR = "USER_CREATE_CHARACTER_NAME_SPECIAL_CHAR_ERROR"
 
-	shared.RegisterError(USER_CREATE_CHARACTER_UNKNOWN_ERROR, "캐릭터 생성 중 알 수 없는 오류")
-	shared.RegisterError(USER_CHARACTER_SLOT_INVALID_ERROR, "잘못된 캐릭터 슬롯입니다.")
-	shared.RegisterError(USER_CHARACTER_SLOT_ALREADY_EXISTS_ERROR, "이미 해당 슬롯에 캐릭터가 존재합니다.")
+func init() {
+	shared.RegisterError(USER_CHECK_CHARACTER_NAME_UNKNOWN_ERROR, "캐릭터 이름 확인 중 알 수 없는 오류가 발생하였습니다")
+	shared.RegisterError(USER_CHARACTER_NAME_ALREADY_EXISTS_ERROR, "이미 존재하는 캐릭터 이름입니다")
+
+	shared.RegisterError(USER_CREATE_CHARACTER_UNKNOWN_ERROR, "캐릭터 생성 중 알 수 없는 오류가 발생하였습니다")
+	shared.RegisterError(USER_CHARACTER_SLOT_INVALID_ERROR, "잘못된 캐릭터 슬롯입니다")
+	shared.RegisterError(USER_CHARACTER_SLOT_ALREADY_EXISTS_ERROR, "이미 해당 슬롯에 캐릭터가 존재합니다")
+
+	shared.RegisterError(USER_CREATE_CHARACTER_ALREADY_REQUEST, "이미 캐릭터 생성 요청이 진행 중입니다")
+	shared.RegisterError(USER_CREATE_CHARACTER_USER_NOT_FOUND, "사용자를 찾을 수 없습니다")
+	shared.RegisterError(USER_CREATE_CHARACTER_NAME_MIN_LENGTH_ERROR, fmt.Sprintf("캐릭터 이름은 최소 %d자 이상이어야 합니다", def.MinCharacterNameLength))
+	shared.RegisterError(USER_CREATE_CHARACTER_NAME_MAX_LENGTH_ERROR, fmt.Sprintf("캐릭터 이름은 최대 %d자 이하여야 합니다", def.MaxCharacterNameLength))
+	shared.RegisterError(USER_CREATE_CHARACTER_NAME_SPECIAL_CHAR_ERROR, "캐릭터 이름에 사용할 수 없는 문자가 포함되어 있습니다")
 }
