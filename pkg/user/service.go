@@ -43,6 +43,7 @@ type UserService struct {
 func (s *UserService) Init() error {
 	s.router.HandleFunc("/user/character/create", s.onCreateCharacter)
 	s.router.HandleFunc("/user/character/create/check_name", s.onCheckCharacterName)
+	s.router.HandleFunc("/user/character/delete", s.onDeleteCharacter)
 
 	return nil
 }
@@ -320,6 +321,120 @@ func (s *UserService) onCheckCharacterName(w http.ResponseWriter, r *http.Reques
 		}
 
 		res.Responses = append(res.Responses, ret)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+
+	if err := json.NewEncoder(w).Encode(&res); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
+func (s *UserService) onDeleteCharacter(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	if r.Method != http.MethodPost {
+		http.Error(w, "Invalid request method", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req DeleteCharacterRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	var res DeleteCharacterResponse
+
+	requestCount := len(req.Requests)
+	sessions := make([]*entity.UserSession, 0, requestCount)
+	deleteInfos := make(map[string]*UserDeleteCharacterInfo, requestCount)
+	for _, entry := range req.Requests {
+		// 잘못된 슬롯 검출
+		if entry.Slot < 1 || entry.Slot > def.MaxCharacterSlot {
+			res.Responses = append(res.Responses, &UserDeleteCharacterResult{
+				Uid:       entry.Uid,
+				ErrorCode: USER_DELETE_CHARACTER_SLOT_INVALID_ERROR,
+			})
+			continue
+		}
+
+		s := &entity.UserSession{
+			Uid:   entry.Uid,
+			Token: entry.Token,
+		}
+		sessions = append(sessions, s)
+		deleteInfos[entry.Uid] = entry
+	}
+
+	_, invalidUids, err := s.authServiceHandler.ValidateUserSessions(ctx, sessions)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	for _, uid := range invalidUids {
+		delete(deleteInfos, uid)
+		res.Responses = append(res.Responses, &UserDeleteCharacterResult{
+			Uid:       uid,
+			ErrorCode: session.SESSION_TOKEN_INVALID_ERROR,
+		})
+	}
+
+	userCharacters, err := s.userRepo.FindCharacters(ctx, func() []string {
+		uids := make([]string, 0, len(deleteInfos))
+		for uid := range deleteInfos {
+			uids = append(uids, uid)
+		}
+		return uids
+	}())
+
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	for uid, chars := range userCharacters {
+		found := false
+		for _, ch := range chars {
+			if ch.Slot == deleteInfos[uid].Slot {
+				deleteInfos[uid].Name = ch.Name
+				found = true
+				break
+			}
+		}
+		if !found {
+			delete(deleteInfos, uid)
+			res.Responses = append(res.Responses, &UserDeleteCharacterResult{
+				Uid:       uid,
+				ErrorCode: USER_DELETE_CHARACTER_SLOT_NOT_FOUND_ERROR,
+			})
+		}
+	}
+
+	userDeleteInfos := make([]*UserDeleteCharacterInfo, 0, len(deleteInfos))
+	for _, info := range deleteInfos {
+		userDeleteInfos = append(userDeleteInfos, info)
+	}
+	successUids, failedUids, err := s.userRepo.DeleteCharacters(ctx, userDeleteInfos)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	for _, uid := range successUids {
+		res.Responses = append(res.Responses, &UserDeleteCharacterResult{
+			Uid:       uid,
+			ErrorCode: "",
+		})
+	}
+
+	for _, uid := range failedUids {
+		res.Responses = append(res.Responses, &UserDeleteCharacterResult{
+			Uid:       uid,
+			ErrorCode: USER_DELETE_CHARACTER_DB_WRITE_ERROR,
+		})
 	}
 
 	w.Header().Set("Content-Type", "application/json")

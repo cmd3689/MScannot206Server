@@ -19,3 +19,12 @@ type UserCreateCharacterResult struct {
 type CreateCharacterResponse struct {
 	Responses []*UserCreateCharacterResult `json:"responses"`
 }
+
+type UserDeleteCharacterResult struct {
+	Uid       string `json:"uid"`
+	ErrorCode string `json:"error_code,omitempty"`
+}
+
+type DeleteCharacterResponse struct {
+	Responses []*UserDeleteCharacterResult `json:"responses"`
+}

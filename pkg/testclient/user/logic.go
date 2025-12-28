@@ -195,3 +195,54 @@ func (l *UserLogic) RequestCreateCharacter(uid string, slot int, name string) er
 
 	return nil
 }
+
+func (l *UserLogic) RequestDeleteCharacter(uid string, slot int) error {
+	u, ok := l.users[uid]
+	if !ok {
+		return ErrUserNotFound
+	}
+
+	req := &user.DeleteCharacterRequest{
+		Requests: []*user.UserDeleteCharacterInfo{
+			{
+				Uid:   u.Uid,
+				Token: u.Token,
+				Slot:  slot,
+			},
+		},
+	}
+
+	res, err := framework.WebRequest[user.DeleteCharacterRequest, user.DeleteCharacterResponse](l.client).
+		Endpoint("user/character/delete").
+		Body(req).
+		Post()
+
+	if err != nil {
+		return err
+	}
+
+	if len(res.Responses) == 0 {
+		return shared.ToError(user.USER_DELETE_CHARACTER_UNKNOWN_ERROR)
+	}
+
+	var errorCode string = user.USER_DELETE_CHARACTER_UNKNOWN_ERROR
+	for _, resp := range res.Responses {
+		if resp.Uid == uid {
+			errorCode = resp.ErrorCode
+			break
+		}
+	}
+
+	if errorCode != "" {
+		return shared.ToError(errorCode)
+	}
+
+	for i, ch := range u.Characters {
+		if ch.Slot == slot {
+			u.Characters = append(u.Characters[:i], u.Characters[i+1:]...)
+			break
+		}
+	}
+
+	return nil
+}
