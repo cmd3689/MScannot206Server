@@ -51,6 +51,9 @@ type UserMongoRepository struct {
 }
 
 func (r *UserMongoRepository) ensureIndexes(ctx context.Context) error {
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+
 	slotIndex := mongo.IndexModel{
 		Keys: bson.D{
 			{Key: "characters.slot", Value: 1},
@@ -59,17 +62,26 @@ func (r *UserMongoRepository) ensureIndexes(ctx context.Context) error {
 			SetName("user_character_slot_idx"),
 	}
 
+	// 캐릭터 인덱스
 	characterNameIndex := mongo.IndexModel{
 		Keys: bson.D{
 			{Key: "characters.name", Value: 1},
 		},
 		Options: options.Index().
-			SetUnique(true).
 			SetName("user_character_name_idx"),
 	}
 
-	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
-	defer cancel()
+	// 기존 인덱스 삭제 - https://github.com/dek0058/MScannot206Server/issues/5
+	if _, err := r.user.Indexes().DropOne(ctx, "user_character_name_idx"); err != nil {
+		var cmdErr mongo.CommandError
+		if errors.As(err, &cmdErr) {
+			if cmdErr.Code != 27 {
+				return err
+			}
+		} else {
+			return err
+		}
+	}
 
 	_, err := r.user.Indexes().CreateMany(ctx, []mongo.IndexModel{slotIndex, characterNameIndex})
 	if err != nil {
@@ -148,6 +160,7 @@ func (r *UserMongoRepository) InsertUserByUids(ctx context.Context, uids []strin
 	_, err := r.user.BulkWrite(ctx, writeModels, options.BulkWrite().SetOrdered(false))
 	if err != nil {
 		if bulkErr, ok := err.(mongo.BulkWriteException); ok {
+			log.Err(err).Msg("일부 유저 생성에 실패했습니다")
 			failedUids := make([]string, len(bulkErr.WriteErrors))
 
 			for i, writeErr := range bulkErr.WriteErrors {
