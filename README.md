@@ -14,8 +14,8 @@
 
 ## 📋 요구사항
 
-- [Go](https://go.dev/doc/install)
-- [MongoDB](https://www.mongodb.com/try/download/community)
+- Go [(다운로드 링크)](https://go.dev/doc/install)
+- MongoDB [(다운로드 링크)](https://www.mongodb.com/try/download/community)
 
 
 ## 📚 API Documentation

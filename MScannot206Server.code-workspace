@@ -23,7 +23,7 @@
 			{
 				"label": "build testClient",
 				"type": "shell",
-				"command": "go build -o ${workspaceFolder}/testclient/bin/MScannot206Client.exe ${workspaceFolder}/cmd/client",
+				"command": "go build -o ${workspaceFolder}/bin/MScannot206Client.exe ${workspaceFolder}/cmd/client",
 				"group": {
 					"kind": "build",
 					"isDefault": false
