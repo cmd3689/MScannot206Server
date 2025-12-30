@@ -13,10 +13,12 @@
 
 상세한 API 명세는 아래 문서들을 참고해주세요.
 
-- [🔐 로그인/인증 API (Login)](document/login.md)
-- [👤 유저/캐릭터 API (User)](document/user.md)
+- [🔐 로그인/인증 API (Login)](document/api/login.md)
+- [👤 유저/캐릭터 API (User)](document/api/user.md)
 
-## 🏗️ 메인 아키텍처
+## 🏗️ 아키텍처
+
+### 메인 플로우
 
 ```mermaid
 graph TD
@@ -30,19 +32,25 @@ graph TD
 
     subgraph Server_Area [Server Side]
         direction TB
+        Handlers[Handlers]:::server
         Services[Services]:::server
         Repositories[Repositories]:::server
     end
 
     subgraph Data_Area [Persistence Layer]
-        DB[("MongoDB")]:::db
+        DB[("Database")]:::db
     end
 
     User--->|1.Connect|Client
-    Client -->|2.API Request| Services
-    Services -->|3.Input Data| Repositories
-    Repositories -->|4.Query| DB
-    DB -.->|5.Result| Repositories
-    Repositories -.->|6.Output Data| Services
-    Services -.->|7.API Response| Client
+    Client -->|2.API Request| Handlers
+    Handlers -->|3.API Call| Services
+    Services -->|4.Input Data| Repositories
+    Repositories -->|5.Query| DB
+    DB -.->|6.Result| Repositories
+    Repositories -.->|7.Business Logic Result| Services
+    Services -.->|8.Response Data| Handlers
+    Handlers -.->|9.API Response| Client
 ```
+
+### 상세 플로우
+- [로그인/인증](document/architecture/auth_flow.md) - 서버의 로그인 및 인증 처리 흐름

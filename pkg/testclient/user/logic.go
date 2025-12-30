@@ -127,17 +127,15 @@ func (l *UserLogic) RequestCheckCharacterName(uid string, name string) error {
 		return shared.ToError(user.USER_CHECK_CHARACTER_NAME_UNKNOWN_ERROR)
 	}
 
-	var available bool = false
 	var errorCode string = ""
-	for _, resp := range res.Responses {
-		if resp.Uid == uid {
-			available = resp.Available
-			errorCode = resp.ErrorCode
+	for _, r := range res.Responses {
+		if r.Uid == uid {
+			errorCode = r.ErrorCode
 			break
 		}
 	}
 
-	if !available {
+	if errorCode != "" {
 		return shared.ToError(errorCode)
 	}
 
@@ -174,19 +172,23 @@ func (l *UserLogic) RequestCreateCharacter(uid string, slot int, name string) er
 		return shared.ToError(user.USER_CREATE_CHARACTER_UNKNOWN_ERROR)
 	}
 
-	var errorCode string = user.USER_CREATE_CHARACTER_UNKNOWN_ERROR
-	for _, resp := range res.Responses {
-		if resp.Uid == uid && resp.Slot == slot {
-			errorCode = resp.ErrorCode
-			break
+	var response *user.UserCreateCharacterResult
+	for _, r := range res.Responses {
+		if r.Uid != uid {
+			continue
 		}
+		response = r
 	}
 
-	if errorCode != "" {
-		return shared.ToError(errorCode)
+	if response.ErrorCode != "" {
+		return shared.ToError(response.ErrorCode)
 	}
 
-	newCh, err := character.NewCharacter(slot, name)
+	if response.Character == nil {
+		return shared.ToError(user.USER_CREATE_CHARACTER_UNKNOWN_ERROR)
+	}
+
+	newCh, err := character.NewCharacter(response.Character.Slot, response.Character.Name)
 	if err != nil {
 		return err
 	}
@@ -225,16 +227,16 @@ func (l *UserLogic) RequestDeleteCharacter(uid string, slot int) error {
 		return shared.ToError(user.USER_DELETE_CHARACTER_UNKNOWN_ERROR)
 	}
 
-	var errorCode string = user.USER_DELETE_CHARACTER_UNKNOWN_ERROR
-	for _, resp := range res.Responses {
-		if resp.Uid == uid {
-			errorCode = resp.ErrorCode
+	var response *user.UserDeleteCharacterResult
+	for _, r := range res.Responses {
+		if r.Uid == uid {
+			response = r
 			break
 		}
 	}
 
-	if errorCode != "" {
-		return shared.ToError(errorCode)
+	if response.ErrorCode != "" {
+		return shared.ToError(response.ErrorCode)
 	}
 
 	for i, ch := range u.Characters {

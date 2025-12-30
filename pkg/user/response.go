@@ -1,8 +1,9 @@
 package user
 
+import "MScannot206/shared/entity"
+
 type UserNameCheckResult struct {
 	Uid       string `json:"uid"`
-	Available bool   `json:"available"`
 	ErrorCode string `json:"error_code,omitempty"`
 }
 
@@ -11,9 +12,9 @@ type CheckCharacterNameResponse struct {
 }
 
 type UserCreateCharacterResult struct {
-	Uid       string `json:"uid"`
-	Slot      int    `json:"slot,omitempty"`
-	ErrorCode string `json:"error_code,omitempty"`
+	Uid       string            `json:"uid"`
+	Character *entity.Character `json:"character,omitempty"`
+	ErrorCode string            `json:"error_code,omitempty"`
 }
 
 type CreateCharacterResponse struct {
