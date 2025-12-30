@@ -4,10 +4,19 @@
 
 [메이플스토리 월드 크리에이터 이용약관](https://github.com/dek0058/MScannot206)을 준수하며, 해당 프로젝트는 비공식 프로젝트임을 알립니다.
 
+
+## 목차
+
+- [📋 요구사항](#-요구사항)
+- [📚 API Documentation](#-api-documentation)
+- [🏗️ 아키텍처](#️-아키텍처)
+- [🖥️ 테스트 클라이언트](#️-테스트-클라이언트)
+
 ## 📋 요구사항
 
- - [Go](https://go.dev/doc/install)
- - [MongoDB](https://www.mongodb.com/try/download/community)
+- [Go](https://go.dev/doc/install)
+- [MongoDB](https://www.mongodb.com/try/download/community)
+
 
 ## 📚 API Documentation
 
@@ -32,9 +41,9 @@ graph TD
 
     subgraph Server_Area [Server Side]
         direction TB
-        Handlers[Handlers]:::server
-        Services[Services]:::server
-        Repositories[Repositories]:::server
+        Handlers[Handler]:::server
+        Services[Service]:::server
+        Repositories[Repository]:::server
     end
 
     subgraph Data_Area [Persistence Layer]
@@ -54,3 +63,9 @@ graph TD
 
 ### 상세 플로우
 - [로그인/인증](document/architecture/auth_flow.md) - 서버의 로그인 및 인증 처리 흐름
+- [유저/캐릭터 관리](document/architecture/user_flow.md) - 유저의 캐릭터 생성, 삭제 등의 처리 흐름
+
+## 🖥️ 테스트 클라이언트
+
+테스트 목적으로 제작된 간단한 콘솔 클라이언트가 포함되어 있습니다. 해당 클라이언트는 `pkg/testclient` 디렉토리에서 확인할 수 있습니다.
+
