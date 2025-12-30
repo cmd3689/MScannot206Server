@@ -3,6 +3,7 @@ package user
 import (
 	"MScannot206/shared/def"
 	"MScannot206/shared/util"
+	"unicode/utf8"
 )
 
 // 유저 캐릭터 슬롯 판별
@@ -12,7 +13,7 @@ func IsInvalidCharacterSlot(slot int) bool {
 
 // 유저 캐릭터 이름 유효성 검사
 func ValidateCharacterName(name string, locale def.Locale) string {
-	l := len(name)
+	l := utf8.RuneCountInString(name)
 	if l < def.MinCharacterNameLength {
 		return USER_CREATE_CHARACTER_NAME_MIN_LENGTH_ERROR
 	} else if l > def.MaxCharacterNameLength {
