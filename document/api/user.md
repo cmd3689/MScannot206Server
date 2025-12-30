@@ -59,7 +59,7 @@
 | :--- | :---: | :---: | :--- |
 | `responses` | Array | ✅ | 캐릭터 생성 결과 리스트 |
 | `responses[].uid` | String | ✅ | 사용자 고유 ID |
-| `responses[].slot` | Integer | ❌ | 생성된 캐릭터의 슬롯 번호 |
+| `responses[].character` | Object | ❌ | 생성된 캐릭터 정보 |
 | `responses[].error_code` | String | ❌ | 실패 사유 (에러 코드) |
 
 **Example:**
@@ -70,11 +70,11 @@
     "responses": [
       {
         "uid": "12345678900000000"
-        "slot": 1
+        "character": {...}
       },
       {
         "uid": "12345678900000001"
-        "slot": 2
+        "character": {...}
       },
       {
         "uid": "12345678900000002",
@@ -134,7 +134,6 @@
 | :--- | :---: | :---: | :--- |
 | `responses` | Array | ✅ | 이름 중복 확인 결과 리스트 |
 | `responses[].uid` | String | ✅ | 사용자 고유 ID |
-| `responses[].available` | Boolean | ✅ | 이름 사용 가능 여부 |
 | `responses[].error_code` | String | ❌ | 실패 사유 (에러 코드) |
 
 **Example:**
@@ -145,15 +144,12 @@
     "responses": [
       {
         "uid": "12345678900000000",
-        "available": true
       },
       {
         "uid": "12345678900000001",
-        "available": true
       },
       {
         "uid": "12345678900000002",
-        "available": false
         "error_code": "USER_CHARACTER_NAME_ALREADY_EXISTS_ERROR"
       }
     ]

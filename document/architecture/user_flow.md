@@ -9,6 +9,8 @@
 
 ## 1. 캐릭터 생성 (Create Character Flow)
 
+유저가 새로운 캐릭터를 생성하는 흐름은 다음과 같습니다.
+
 ```mermaid
 sequenceDiagram
     autonumber
@@ -49,6 +51,8 @@ sequenceDiagram
 ```
 
 ## 2. 캐릭터 삭제 (Delete Character Flow)
+
+유저가 기존 캐릭터를 삭제하는 흐름은 다음과 같습니다.
 
 ```mermaid
 sequenceDiagram
