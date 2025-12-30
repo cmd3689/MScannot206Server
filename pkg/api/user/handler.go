@@ -149,7 +149,7 @@ func (h *UserHandler) onCreateCharacter(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	for uid, _ := range requests {
+	for uid := range requests {
 		character, ok := createdCharacters[uid]
 		// 생성된 캐릭터가 없을 경우
 		if !ok {
