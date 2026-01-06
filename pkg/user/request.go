@@ -20,3 +20,13 @@ type UserCreateCharacterInfo struct {
 type CreateCharacterRequest struct {
 	Requests []*UserCreateCharacterInfo `json:"requests"`
 }
+
+type UserDeleteCharacterInfo struct {
+	Uid   string `json:"uid"`
+	Token string `json:"token"`
+	Slot  int    `json:"slot"`
+}
+
+type DeleteCharacterRequest struct {
+	Requests []*UserDeleteCharacterInfo `json:"requests"`
+}

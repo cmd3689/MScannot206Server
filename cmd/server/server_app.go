@@ -1,6 +1,7 @@
 package main
 
 import (
+	"MScannot206/pkg/api"
 	"MScannot206/pkg/auth"
 	"MScannot206/pkg/auth/session"
 	"MScannot206/pkg/login"
@@ -21,6 +22,7 @@ import (
 	"github.com/rs/zerolog/log"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
+	"go.mongodb.org/mongo-driver/mongo/readpref"
 )
 
 func loadDefaultConfig(executablePath string, defaultFileName string, cfg interface{}) {
@@ -87,14 +89,14 @@ func setupServices(server *server.WebServer, cfg *config.WebServerConfig) error 
 	}
 
 	// 로그인 서비스
-	login_service, err := login.NewLoginService(server, server.GetRouter())
+	login_service, err := login.NewLoginService()
 	if err != nil {
 		errs = errors.Join(errs, err)
 		log.Error().Err(err).Msg("로그인 서비스 생성 오류")
 	}
 
 	// 유저 서비스
-	user_service, err := user.NewUserService(server, server.GetRouter())
+	user_service, err := user.NewUserService()
 	if err != nil {
 		errs = errors.Join(errs, err)
 		log.Error().Err(err).Msg("유저 서비스 생성 오류")
@@ -116,7 +118,7 @@ func setupServices(server *server.WebServer, cfg *config.WebServerConfig) error 
 		log.Error().Err(err).Msg("세션 레포지토리 생성 오류")
 	}
 
-	userRepo, err := user.NewUserMongoRepository(server.GetMongoClient(), gameDBName)
+	userRepo, err := user.NewUserMongoRepository(server.GetContext(), server.GetMongoClient(), gameDBName)
 	if err != nil {
 		errs = errors.Join(errs, err)
 		log.Error().Err(err).Msg("유저 레포지토리 생성 오류")
@@ -130,19 +132,9 @@ func setupServices(server *server.WebServer, cfg *config.WebServerConfig) error 
 		log.Error().Err(err).Msg("인증 서비스 레포지토리 설정 오류")
 	}
 
-	if err := login_service.SetHandlers(auth_service); err != nil {
-		errs = errors.Join(errs, err)
-		log.Error().Err(err).Msg("로그인 서비스 핸들러 설정 오류")
-	}
-
 	if err := login_service.SetRepositories(userRepo); err != nil {
 		errs = errors.Join(errs, err)
 		log.Error().Err(err).Msg("로그인 서비스 레포지토리 설정 오류")
-	}
-
-	if err := user_service.SetHandlers(auth_service); err != nil {
-		errs = errors.Join(errs, err)
-		log.Error().Err(err).Msg("유저 서비스 핸들러 설정 오류")
 	}
 
 	if err := user_service.SetRepositories(userRepo); err != nil {
@@ -174,10 +166,15 @@ func setupServices(server *server.WebServer, cfg *config.WebServerConfig) error 
 func run(ctx context.Context, cfg *config.WebServerConfig) error {
 	opts := options.Client().ApplyURI(cfg.MongoUri)
 	mongoClient, err := mongo.Connect(ctx, opts)
+	log.Info().Msgf("MongoDB 연결을 시도 합니다. [uri:%v]", cfg.MongoUri)
 	if err != nil {
 		log.Err(err).Msgf("MongoDB 연결에 실패하였습니다. [uri:%v]", cfg.MongoUri)
 		return err
+	} else if err := mongoClient.Ping(ctx, readpref.Primary()); err != nil {
+		log.Err(err).Msgf("MongoDB 연결 실패하였습니다.. [uri:%v]", cfg.MongoUri)
+		return err
 	}
+
 	log.Info().Msgf("MongoDB 연결 완료이 완료되었습니다. [uri:%v]", cfg.MongoUri)
 
 	web_server, err := server.NewWebServer(
@@ -187,14 +184,24 @@ func run(ctx context.Context, cfg *config.WebServerConfig) error {
 	)
 
 	if err != nil {
+		log.Err(err).Msg("웹 서버 생성 오류")
 		panic(err)
 	}
 
+	// 서비스 등록
 	if err := setupServices(web_server, cfg); err != nil {
+		log.Err(err).Msg("서비스 설정 오류")
 		panic(err)
 	}
 
 	if err := web_server.Init(); err != nil {
+		log.Err(err).Msg("웹 서버 초기화 오류")
+		panic(err)
+	}
+
+	// API 핸들러 등록
+	if err := api.SetupRoutes(web_server, web_server.GetRouter()); err != nil {
+		log.Err(err).Msg("API 핸들러 등록 오류")
 		panic(err)
 	}
 

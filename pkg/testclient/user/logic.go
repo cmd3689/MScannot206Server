@@ -115,7 +115,7 @@ func (l *UserLogic) RequestCheckCharacterName(uid string, name string) error {
 	}
 
 	res, err := framework.WebRequest[user.CheckCharacterNameRequest, user.CheckCharacterNameResponse](l.client).
-		Endpoint("user/character/create/check_name").
+		Endpoint("api/v1/user/character/create/check_name").
 		Body(req).
 		Post()
 
@@ -127,17 +127,15 @@ func (l *UserLogic) RequestCheckCharacterName(uid string, name string) error {
 		return shared.ToError(user.USER_CHECK_CHARACTER_NAME_UNKNOWN_ERROR)
 	}
 
-	var available bool = false
 	var errorCode string = ""
-	for _, resp := range res.Responses {
-		if resp.Uid == uid {
-			available = resp.Available
-			errorCode = resp.ErrorCode
+	for _, r := range res.Responses {
+		if r.Uid == uid {
+			errorCode = r.ErrorCode
 			break
 		}
 	}
 
-	if !available {
+	if errorCode != "" {
 		return shared.ToError(errorCode)
 	}
 
@@ -162,7 +160,7 @@ func (l *UserLogic) RequestCreateCharacter(uid string, slot int, name string) er
 	}
 
 	res, err := framework.WebRequest[user.CreateCharacterRequest, user.CreateCharacterResponse](l.client).
-		Endpoint("user/character/create").
+		Endpoint("api/v1/user/character/create").
 		Body(req).
 		Post()
 
@@ -174,24 +172,79 @@ func (l *UserLogic) RequestCreateCharacter(uid string, slot int, name string) er
 		return shared.ToError(user.USER_CREATE_CHARACTER_UNKNOWN_ERROR)
 	}
 
-	var errorCode string = user.USER_CREATE_CHARACTER_UNKNOWN_ERROR
-	for _, resp := range res.Responses {
-		if resp.Uid == uid && resp.Slot == slot {
-			errorCode = resp.ErrorCode
-			break
+	var response *user.UserCreateCharacterResult
+	for _, r := range res.Responses {
+		if r.Uid != uid {
+			continue
 		}
+		response = r
 	}
 
-	if errorCode != "" {
-		return shared.ToError(errorCode)
+	if response.ErrorCode != "" {
+		return shared.ToError(response.ErrorCode)
 	}
 
-	newCh, err := character.NewCharacter(slot, name)
+	if response.Character == nil {
+		return shared.ToError(user.USER_CREATE_CHARACTER_UNKNOWN_ERROR)
+	}
+
+	newCh, err := character.NewCharacter(response.Character.Slot, response.Character.Name)
 	if err != nil {
 		return err
 	}
 
 	u.Characters = append(u.Characters, newCh)
+
+	return nil
+}
+
+func (l *UserLogic) RequestDeleteCharacter(uid string, slot int) error {
+	u, ok := l.users[uid]
+	if !ok {
+		return ErrUserNotFound
+	}
+
+	req := &user.DeleteCharacterRequest{
+		Requests: []*user.UserDeleteCharacterInfo{
+			{
+				Uid:   u.Uid,
+				Token: u.Token,
+				Slot:  slot,
+			},
+		},
+	}
+
+	res, err := framework.WebRequest[user.DeleteCharacterRequest, user.DeleteCharacterResponse](l.client).
+		Endpoint("api/v1/user/character/delete").
+		Body(req).
+		Post()
+
+	if err != nil {
+		return err
+	}
+
+	if len(res.Responses) == 0 {
+		return shared.ToError(user.USER_DELETE_CHARACTER_UNKNOWN_ERROR)
+	}
+
+	var response *user.UserDeleteCharacterResult
+	for _, r := range res.Responses {
+		if r.Uid == uid {
+			response = r
+			break
+		}
+	}
+
+	if response.ErrorCode != "" {
+		return shared.ToError(response.ErrorCode)
+	}
+
+	for i, ch := range u.Characters {
+		if ch.Slot == slot {
+			u.Characters = append(u.Characters[:i], u.Characters[i+1:]...)
+			break
+		}
+	}
 
 	return nil
 }

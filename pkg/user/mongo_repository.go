@@ -16,6 +16,7 @@ import (
 var ErrUserMongoRepositoryIsNil = errors.New("user mongo repository is null")
 
 func NewUserMongoRepository(
+	ctx context.Context,
 	client *mongo.Client,
 	dbName string,
 ) (*UserMongoRepository, error) {
@@ -30,10 +31,14 @@ func NewUserMongoRepository(
 
 	repo := &UserMongoRepository{
 		client: client,
+
+		user:          client.Database(dbName).Collection(shared.User),
+		characterName: client.Database(dbName).Collection(shared.CharacterName),
 	}
 
-	repo.user = client.Database(dbName).Collection(shared.User)
-	repo.characterName = client.Database(dbName).Collection(shared.CharacterName)
+	if err := repo.ensureIndexes(ctx); err != nil {
+		return nil, err
+	}
 
 	return repo, nil
 }
@@ -43,6 +48,47 @@ type UserMongoRepository struct {
 
 	user          *mongo.Collection
 	characterName *mongo.Collection
+}
+
+func (r *UserMongoRepository) ensureIndexes(ctx context.Context) error {
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+
+	slotIndex := mongo.IndexModel{
+		Keys: bson.D{
+			{Key: "characters.slot", Value: 1},
+		},
+		Options: options.Index().
+			SetName("user_character_slot_idx"),
+	}
+
+	// 캐릭터 인덱스
+	characterNameIndex := mongo.IndexModel{
+		Keys: bson.D{
+			{Key: "characters.name", Value: 1},
+		},
+		Options: options.Index().
+			SetName("user_character_name_idx"),
+	}
+
+	// 기존 인덱스 삭제 - https://github.com/dek0058/MScannot206Server/issues/5
+	if _, err := r.user.Indexes().DropOne(ctx, "user_character_name_idx"); err != nil {
+		var cmdErr mongo.CommandError
+		if errors.As(err, &cmdErr) {
+			if cmdErr.Code != 27 {
+				return err
+			}
+		} else {
+			return err
+		}
+	}
+
+	_, err := r.user.Indexes().CreateMany(ctx, []mongo.IndexModel{slotIndex, characterNameIndex})
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func (r *UserMongoRepository) FindUserByUids(ctx context.Context, uids []string) ([]*entity.User, []string, error) {
@@ -114,6 +160,7 @@ func (r *UserMongoRepository) InsertUserByUids(ctx context.Context, uids []strin
 	_, err := r.user.BulkWrite(ctx, writeModels, options.BulkWrite().SetOrdered(false))
 	if err != nil {
 		if bulkErr, ok := err.(mongo.BulkWriteException); ok {
+			log.Err(err).Msg("일부 유저 생성에 실패했습니다")
 			failedUids := make([]string, len(bulkErr.WriteErrors))
 
 			for i, writeErr := range bulkErr.WriteErrors {
@@ -169,106 +216,81 @@ func (r *UserMongoRepository) ExistsCharacterNames(ctx context.Context, names []
 	return existsMap, nil
 }
 
-func (r *UserMongoRepository) GetUsersCharacterSlotCount(ctx context.Context, uids []string) (map[string]int, error) {
-	slotCountMap := make(map[string]int, len(uids))
-
-	return slotCountMap, nil
-}
-
-func (r *UserMongoRepository) CreateCharacters(ctx context.Context, infos []*UserCreateCharacterInfo) ([]string, []string, error) {
+func (r *UserMongoRepository) CreateCharacters(ctx context.Context, infos []*UserCreateCharacter) (map[string]*entity.Character, error) {
 	if len(infos) == 0 {
-		return []string{}, []string{}, nil
+		return map[string]*entity.Character{}, nil
 	}
 
-	successInfos := make(map[string]*UserCreateCharacterInfo, len(infos))
-	failedUids := make(map[string]struct{}, 0)
-
+	userRequests := make(map[string]*UserCreateCharacter, len(infos))
 	charNameModels := make([]mongo.WriteModel, len(infos))
 
 	for i, info := range infos {
-		successInfos[info.Uid] = info
+		userRequests[info.Uid] = info
 
-		charNameDoc := &entity.CharacterName{
+		doc := &entity.CharacterName{
 			Name:      info.Name,
 			CreatedAt: time.Now().UTC(),
 		}
-
-		charNameModels[i] = mongo.NewInsertOneModel().SetDocument(charNameDoc)
+		charNameModels[i] = mongo.NewInsertOneModel().SetDocument(doc)
 	}
 
 	_, err := r.characterName.BulkWrite(ctx, charNameModels, options.BulkWrite().SetOrdered(false))
 	if err != nil {
 		if bulkErr, ok := err.(mongo.BulkWriteException); ok {
 			for _, writeErr := range bulkErr.WriteErrors {
-				failedUids[infos[writeErr.Index].Uid] = struct{}{}
+				delete(userRequests, infos[writeErr.Index].Uid)
 			}
 		} else {
-			return nil, nil, err
+			return nil, err
 		}
 	}
 
-	for uid := range failedUids {
-		delete(successInfos, uid)
+	createInfos := make([]*UserCreateCharacter, 0, len(userRequests))
+	for _, info := range userRequests {
+		createInfos = append(createInfos, info)
 	}
 
-	newCharModels := make([]mongo.WriteModel, 0, len(successInfos))
-	for _, info := range successInfos {
+	createdCharacters := make(map[string]*entity.Character, len(createInfos))
+	removeCharNameModels := make([]mongo.WriteModel, 0, len(createInfos))
+	newCharModels := make([]mongo.WriteModel, len(createInfos))
+
+	for i, info := range createInfos {
+		newCharacter := &entity.Character{
+			Slot: info.Slot,
+			Name: info.Name,
+		}
+
 		update := bson.D{
 			{Key: "$push", Value: bson.D{
-				{Key: "characters", Value: bson.D{
-					{Key: "key", Value: info.Slot},
-					{Key: "name", Value: info.Name},
-				}},
+				{Key: "characters", Value: newCharacter},
 			}},
 		}
 		filter := bson.D{
 			{Key: "_id", Value: info.Uid},
 		}
 
-		newCharModels = append(newCharModels, mongo.NewUpdateOneModel().SetFilter(filter).SetUpdate(update).SetUpsert(false))
+		createdCharacters[info.Uid] = newCharacter
+		newCharModels[i] = mongo.NewUpdateOneModel().SetFilter(filter).SetUpdate(update).SetUpsert(false)
 	}
 
-	removeCharNames := make([]string, 0, len(failedUids))
-	removeCharNameModels := make([]mongo.WriteModel, 0, len(failedUids))
-
-	var errException error
 	if len(newCharModels) > 0 {
 		_, err = r.user.BulkWrite(ctx, newCharModels, options.BulkWrite().SetOrdered(false))
 		if err != nil {
 			if bulkErr, ok := err.(mongo.BulkWriteException); ok {
-				errUids := make([]string, 0, len(bulkErr.WriteErrors))
 				for _, writeErr := range bulkErr.WriteErrors {
-					failedUids[infos[writeErr.Index].Uid] = struct{}{}
-					errUids = append(errUids, infos[writeErr.Index].Uid)
-				}
-
-				// 캐릭터 생성에 실패하였다면 이전에 기록된 캐릭터 이름도 삭제
-				for _, info := range successInfos {
-					if _, ok := failedUids[info.Uid]; ok {
-						removeCharNames = append(removeCharNames, info.Name)
-
-						opts := mongo.NewDeleteOneModel().SetFilter(bson.D{
-							{Key: "_id", Value: info.Name},
-						})
-						removeCharNameModels = append(removeCharNameModels, opts)
-					}
-				}
-
-				for _, uid := range errUids {
-					delete(successInfos, uid)
-				}
-			} else {
-				// 기타 오류가 발생하였음으로 생성한 캐릭터 이름을 전부 삭제 요청
-				log.Warn().Msg("캐릭터 생성 중 오류 발생, 생성된 캐릭터 이름 삭제 시도")
-				errException = err
-				for _, info := range successInfos {
-					removeCharNames = append(removeCharNames, info.Name)
+					info := createInfos[writeErr.Index]
+					delete(createdCharacters, info.Uid)
 
 					opts := mongo.NewDeleteOneModel().SetFilter(bson.D{
 						{Key: "_id", Value: info.Name},
 					})
 					removeCharNameModels = append(removeCharNameModels, opts)
 				}
+			} else {
+				// 캐릭터 생성 중 오류가 발생함... CS처리가 필요 할 수 있음
+				// TODO:특수 상황 로그 남기기
+				log.Err(err)
+				return nil, err
 			}
 		}
 	}
@@ -279,28 +301,90 @@ func (r *UserMongoRepository) CreateCharacters(ctx context.Context, infos []*Use
 			if bulkErr, ok := err.(mongo.BulkWriteException); ok {
 				log.Warn().Msg("일부 캐릭터 이름 삭제에 실패했습니다")
 				for _, writeErr := range bulkErr.WriteErrors {
-					log.Warn().Msgf("캐릭터 이름 삭제 실패: %v - %v", removeCharNames[writeErr.Index], writeErr.Message)
+					log.Warn().Msgf("캐릭터 이름 삭제 실패: %v - %v", createInfos[writeErr.Index].Name, writeErr.Message)
 				}
 			}
 			log.Err(err).Msg("캐릭터 이름 삭제 중 오류 발생")
 		}
 	}
 
-	if errException != nil {
-		return nil, nil, errException
+	return createdCharacters, nil
+}
+
+func (r *UserMongoRepository) DeleteCharacters(ctx context.Context, infos []*UserDeleteCharacter) ([]string, error) {
+	if len(infos) == 0 {
+		return []string{}, nil
 	}
 
-	fail := make([]string, 0, len(failedUids))
-	for uid := range failedUids {
-		fail = append(fail, uid)
+	successUids := make(map[string]string, len(infos))
+	writeModels := make([]mongo.WriteModel, len(infos))
+	for i, info := range infos {
+		filter := bson.D{
+			{Key: "_id", Value: info.Uid},
+		}
+		update := bson.D{
+			{Key: "$pull", Value: bson.D{
+				{Key: "characters", Value: bson.D{
+					{Key: "slot", Value: info.Slot},
+				}},
+			}},
+		}
+
+		successUids[info.Uid] = info.Name
+		writeModels[i] = mongo.NewUpdateOneModel().SetFilter(filter).SetUpdate(update).SetUpsert(false)
 	}
 
-	success := make([]string, 0, len(successInfos))
-	for uid := range successInfos {
-		success = append(success, uid)
+	_, err := r.user.BulkWrite(ctx, writeModels, options.BulkWrite().SetOrdered(false))
+	if err != nil {
+		if bulkErr, ok := err.(mongo.BulkWriteException); ok {
+			log.Warn().Msg("일부 캐릭터 제거에 실패했습니다")
+			for _, writeErr := range bulkErr.WriteErrors {
+				log.Warn().Msgf("캐릭터 제거 실패: %v", writeErr.Message)
+				delete(successUids, infos[writeErr.Index].Uid)
+			}
+		} else {
+			log.Error().Msg("캐릭터 제거 중 오류 발생")
+			return nil, err
+		}
 	}
 
-	return success, fail, nil
+	// 캐릭터 삭제에 성공하였다면 캐릭터 이름도 삭제
+	if len(successUids) == 0 {
+		return []string{}, nil
+	}
+
+	deleteNames := make([]string, 0, len(successUids))
+	for _, name := range successUids {
+		deleteNames = append(deleteNames, name)
+	}
+	deleteCharNameModels := make([]mongo.WriteModel, 0, len(successUids))
+
+	for _, name := range deleteNames {
+		filter := bson.D{
+			{Key: "_id", Value: name},
+		}
+
+		deleteCharNameModels = append(deleteCharNameModels, mongo.NewDeleteOneModel().SetFilter(filter))
+	}
+
+	_, err = r.characterName.BulkWrite(ctx, deleteCharNameModels, options.BulkWrite().SetOrdered(false))
+	if err != nil {
+		if bulkErr, ok := err.(mongo.BulkWriteException); ok {
+			log.Warn().Msg("일부 캐릭터 이름 삭제에 실패했습니다")
+			for _, writeErr := range bulkErr.WriteErrors {
+				// 삭제에 실패한 캐릭터 이름은 별도로 삭제를 해줘야 함...
+				log.Warn().Msgf("캐릭터 이름 삭제 실패: %v - %v", deleteNames[writeErr.Index], writeErr.Message)
+			}
+		}
+		log.Err(err).Msg("캐릭터 이름 삭제 중 오류 발생")
+	}
+	return func() []string {
+		successUidsList := make([]string, 0, len(successUids))
+		for uid := range successUids {
+			successUidsList = append(successUidsList, uid)
+		}
+		return successUidsList
+	}(), nil
 }
 
 func (r *UserMongoRepository) FindCharacters(ctx context.Context, uids []string) (map[string][]*entity.Character, error) {

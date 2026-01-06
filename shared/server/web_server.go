@@ -2,6 +2,7 @@ package server
 
 import (
 	"MScannot206/shared/config"
+	"MScannot206/shared/def"
 	"MScannot206/shared/service"
 	"context"
 	"errors"
@@ -77,6 +78,10 @@ func (s WebServer) GetRouter() *http.ServeMux {
 
 func (s WebServer) GetMongoClient() *mongo.Client {
 	return s.mongoClient
+}
+
+func (s WebServer) GetLocale() def.Locale {
+	return def.Locale(s.cfg.Locale)
 }
 
 func (s *WebServer) Init() error {
