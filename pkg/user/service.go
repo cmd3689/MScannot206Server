@@ -14,15 +14,11 @@ type UserService struct {
 	userRepo *UserMongoRepository
 }
 
-func (s *UserService) Init() error {
+func (s *UserService) Start(ctx context.Context) error {
 	return nil
 }
 
-func (s *UserService) Start() error {
-	return nil
-}
-
-func (s *UserService) Stop() error {
+func (s *UserService) Stop(ctx context.Context) error {
 	return nil
 }
 
@@ -50,9 +46,9 @@ func (s *UserService) FindCharacterNames(ctx context.Context, names []string) (m
 	return s.userRepo.ExistsCharacterNames(ctx, names)
 }
 
-func (s *UserService) CreateCharacterByUsers(ctx context.Context, createInfos []*UserCreateCharacter) (map[string]*entity.Character, error) {
+func (s *UserService) CreateCharacterByUsers(ctx context.Context, createInfos []*UserCreateCharacter) (map[string]*entity.Character, map[string]string, error) {
 	if len(createInfos) == 0 {
-		return map[string]*entity.Character{}, nil
+		return map[string]*entity.Character{}, map[string]string{}, nil
 	}
 	return s.userRepo.CreateCharacters(ctx, createInfos)
 }

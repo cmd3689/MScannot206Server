@@ -1,15 +1,20 @@
 package api
 
 import (
+	"MScannot206/pkg/api/batch"
+	channel_api "MScannot206/pkg/api/channel"
 	"MScannot206/pkg/api/login"
 	"MScannot206/pkg/api/user"
 	"MScannot206/shared/service"
+	"context"
 	"errors"
 	"net/http"
 )
 
 type apiHandler interface {
 	RegisterHandle(*http.ServeMux)
+	Execute(ctx context.Context, api string, body string) (any, error)
+	GetApiNames() []string
 }
 
 func SetupRoutes(host service.ServiceHost, r *http.ServeMux) error {
@@ -21,9 +26,16 @@ func SetupRoutes(host service.ServiceHost, r *http.ServeMux) error {
 		return errors.New("router가 없습니다.")
 	}
 
+	apiManager := NewApiManager()
+
 	var errs error
 
-	// Login Handler
+	// Batch
+	batchHandler, err := batch.NewBatchHandler(host, apiManager)
+	if err != nil {
+		errs = errors.Join(errs, err)
+	}
+
 	loginHandler, err := login.NewLoginHandler(host)
 	if err != nil {
 		errs = errors.Join(errs, err)
@@ -34,12 +46,31 @@ func SetupRoutes(host service.ServiceHost, r *http.ServeMux) error {
 		errs = errors.Join(errs, err)
 	}
 
+	channelHandler, err := channel_api.NewChannelHandler(host)
+	if err != nil {
+		errs = errors.Join(errs, err)
+	}
+
+	if errs != nil {
+		return errs
+	}
+
+	// 배치 핸들러는 별도로 등록
+	batchHandler.RegisterHandle(r)
+
 	// bind
 	for _, h := range []apiHandler{
 		loginHandler,
 		userHandler,
+		channelHandler,
 	} {
+		// 핸들러 등록
 		h.RegisterHandle(r)
+
+		// API 호출기 등록
+		for _, apiName := range h.GetApiNames() {
+			apiManager.RegisterApiCaller(apiName, h)
+		}
 	}
 
 	return errs

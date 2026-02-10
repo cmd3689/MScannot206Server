@@ -6,7 +6,10 @@ import (
 	"MScannot206/pkg/user"
 	"MScannot206/shared/entity"
 	"MScannot206/shared/service"
+	"context"
 	"encoding/json"
+	"errors"
+	"io"
 	"net/http"
 )
 
@@ -47,20 +50,40 @@ func (h *UserHandler) RegisterHandle(r *http.ServeMux) {
 	r.HandleFunc("POST /api/v1/user/character/delete", h.onDeleteCharacter)
 }
 
-// 캐릭터 생성 핸들러
-func (h *UserHandler) onCreateCharacter(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
+func (h *UserHandler) GetApiNames() []string {
+	return []string{
+		"user/character/create",
+		"user/character/create/check_name",
+		"user/character/delete",
+	}
+}
 
-	var req user.CreateCharacterRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
+func (h *UserHandler) Execute(ctx context.Context, api string, body string) (any, error) {
+	switch api {
+	case "user/character/create":
+		return h.createCharacter(ctx, body)
+
+	case "user/character/create/check_name":
+		return h.checkCharacterName(ctx, body)
+
+	case "user/character/delete":
+		return h.deleteCharacter(ctx, body)
+
+	default:
+		return nil, errors.New("알 수 없는 API 호출입니다: " + api)
+	}
+}
+
+func (h *UserHandler) createCharacter(ctx context.Context, body string) (any, error) {
+	var req CreateCharacterRequest
+	if err := json.Unmarshal([]byte(body), &req); err != nil {
+		return nil, err
 	}
 
 	requestCount := len(req.Requests)
 	sessions := make([]*entity.UserSession, 0, requestCount)
 	requests := make(map[string]*user.UserCreateCharacter, requestCount)
-	var res user.CreateCharacterResponse
+	var res CreateCharacterResponse
 
 	for _, entry := range req.Requests {
 		errCode := ""
@@ -71,15 +94,15 @@ func (h *UserHandler) onCreateCharacter(w http.ResponseWriter, r *http.Request) 
 		} else {
 			// 캐릭터 이름 유효성 검사
 			errCode = user.ValidateCharacterName(entry.Name, h.host.GetLocale())
+		}
 
-			// 오류가 있을 경우 다음 요청으로 넘어감
-			if errCode != "" {
-				res.Responses = append(res.Responses, &user.UserCreateCharacterResult{
-					Uid:       entry.Uid,
-					ErrorCode: errCode,
-				})
-				continue
-			}
+		// 오류가 있을 경우 다음 요청으로 넘어감
+		if errCode != "" {
+			res.Responses = append(res.Responses, &UserCreateCharacterResult{
+				Uid:       entry.Uid,
+				ErrorCode: errCode,
+			})
+			continue
 		}
 
 		sessions = append(sessions, &entity.UserSession{
@@ -96,13 +119,12 @@ func (h *UserHandler) onCreateCharacter(w http.ResponseWriter, r *http.Request) 
 
 	_, invalidUids, err := h.authService.ValidateUserSessions(ctx, sessions)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
+		return nil, err
 	}
 
 	for _, uid := range invalidUids {
 		delete(requests, uid)
-		res.Responses = append(res.Responses, &user.UserCreateCharacterResult{
+		res.Responses = append(res.Responses, &UserCreateCharacterResult{
 			Uid:       uid,
 			ErrorCode: session.SESSION_TOKEN_INVALID_ERROR,
 		})
@@ -117,8 +139,7 @@ func (h *UserHandler) onCreateCharacter(w http.ResponseWriter, r *http.Request) 
 	}())
 
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
+		return nil, err
 	}
 
 	for uid, characters := range userCharacters {
@@ -127,7 +148,7 @@ func (h *UserHandler) onCreateCharacter(w http.ResponseWriter, r *http.Request) 
 				continue
 			}
 
-			res.Responses = append(res.Responses, &user.UserCreateCharacterResult{
+			res.Responses = append(res.Responses, &UserCreateCharacterResult{
 				Uid:       uid,
 				ErrorCode: user.USER_CHARACTER_SLOT_ALREADY_EXISTS_ERROR,
 			})
@@ -136,7 +157,7 @@ func (h *UserHandler) onCreateCharacter(w http.ResponseWriter, r *http.Request) 
 		}
 	}
 
-	createdCharacters, err := h.userService.CreateCharacterByUsers(ctx, func() []*user.UserCreateCharacter {
+	createdCharacters, failureUids, err := h.userService.CreateCharacterByUsers(ctx, func() []*user.UserCreateCharacter {
 		createInfos := make([]*user.UserCreateCharacter, 0, len(requests))
 		for _, info := range requests {
 			createInfos = append(createInfos, info)
@@ -145,54 +166,49 @@ func (h *UserHandler) onCreateCharacter(w http.ResponseWriter, r *http.Request) 
 	}())
 
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
+		return nil, err
 	}
 
 	for uid := range requests {
 		character, ok := createdCharacters[uid]
 		// 생성된 캐릭터가 없을 경우
 		if !ok {
-			res.Responses = append(res.Responses, &user.UserCreateCharacterResult{
+			errorCode := user.USER_CREATE_CHARACTER_DB_WRITE_ERROR
+			if _, ok := failureUids[uid]; ok {
+				errorCode = failureUids[uid]
+			}
+
+			res.Responses = append(res.Responses, &UserCreateCharacterResult{
 				Uid:       uid,
-				ErrorCode: user.USER_CREATE_CHARACTER_DB_WRITE_ERROR,
+				ErrorCode: errorCode,
 			})
 			continue
 		}
 
-		res.Responses = append(res.Responses, &user.UserCreateCharacterResult{
+		res.Responses = append(res.Responses, &UserCreateCharacterResult{
 			Uid:       uid,
 			Character: character,
 		})
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-
-	if err := json.NewEncoder(w).Encode(&res); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-	}
+	return &res, nil
 }
 
-// 캐릭터 이름 중복 확인 핸들러
-func (h *UserHandler) onCheckCharacterName(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-
-	var req user.CheckCharacterNameRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
+func (h *UserHandler) checkCharacterName(ctx context.Context, body string) (any, error) {
+	var req CheckCharacterNameRequest
+	if err := json.Unmarshal([]byte(body), &req); err != nil {
+		return nil, err
 	}
 
 	requestCount := len(req.Requests)
 	sessions := make([]*entity.UserSession, 0, requestCount)
 	requests := make(map[string]*user.UserCreateCharacter, requestCount)
-	var res user.CheckCharacterNameResponse
+	var res CheckCharacterNameResponse
 
 	for _, entry := range req.Requests {
 		// 캐릭터 이름 유효성 검사
 		if errCode := user.ValidateCharacterName(entry.Name, h.host.GetLocale()); errCode != "" {
-			res.Responses = append(res.Responses, &user.UserNameCheckResult{
+			res.Responses = append(res.Responses, &UserNameCheckResult{
 				Uid:       entry.Uid,
 				ErrorCode: errCode,
 			})
@@ -212,13 +228,12 @@ func (h *UserHandler) onCheckCharacterName(w http.ResponseWriter, r *http.Reques
 
 	_, invalidUids, err := h.authService.ValidateUserSessions(ctx, sessions)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
+		return nil, err
 	}
 
 	for _, uid := range invalidUids {
 		delete(requests, uid)
-		res.Responses = append(res.Responses, &user.UserNameCheckResult{
+		res.Responses = append(res.Responses, &UserNameCheckResult{
 			Uid:       uid,
 			ErrorCode: session.SESSION_TOKEN_INVALID_ERROR,
 		})
@@ -233,49 +248,40 @@ func (h *UserHandler) onCheckCharacterName(w http.ResponseWriter, r *http.Reques
 	}())
 
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
+		return nil, err
 	}
 
 	for uid, info := range requests {
 		if exists, ok := existingNames[info.Name]; ok && exists {
-			res.Responses = append(res.Responses, &user.UserNameCheckResult{
+			res.Responses = append(res.Responses, &UserNameCheckResult{
 				Uid:       uid,
 				ErrorCode: user.USER_CHARACTER_NAME_ALREADY_EXISTS_ERROR,
 			})
 		} else {
-			res.Responses = append(res.Responses, &user.UserNameCheckResult{
+			res.Responses = append(res.Responses, &UserNameCheckResult{
 				Uid: uid,
 			})
 		}
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	if err := json.NewEncoder(w).Encode(&res); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-	}
+	return &res, nil
 }
 
-// 캐릭터 삭제 핸들러
-func (h *UserHandler) onDeleteCharacter(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-
-	var req user.DeleteCharacterRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
+func (h *UserHandler) deleteCharacter(ctx context.Context, body string) (any, error) {
+	var req DeleteCharacterRequest
+	if err := json.Unmarshal([]byte(body), &req); err != nil {
+		return nil, err
 	}
 
 	requestCount := len(req.Requests)
 	sessions := make([]*entity.UserSession, 0, requestCount)
-	requests := make(map[string]*user.UserDeleteCharacterInfo, requestCount)
+	requests := make(map[string]*UserDeleteCharacterInfo, requestCount)
 
-	var res user.DeleteCharacterResponse
+	var res DeleteCharacterResponse
 
 	for _, entry := range req.Requests {
 		if user.IsInvalidCharacterSlot(entry.Slot) {
-			res.Responses = append(res.Responses, &user.UserDeleteCharacterResult{
+			res.Responses = append(res.Responses, &UserDeleteCharacterResult{
 				Uid:       entry.Uid,
 				ErrorCode: user.USER_CHARACTER_SLOT_INVALID_ERROR,
 			})
@@ -287,7 +293,7 @@ func (h *UserHandler) onDeleteCharacter(w http.ResponseWriter, r *http.Request) 
 			Token: entry.Token,
 		})
 
-		requests[entry.Uid] = &user.UserDeleteCharacterInfo{
+		requests[entry.Uid] = &UserDeleteCharacterInfo{
 			Uid:   entry.Uid,
 			Token: entry.Token,
 			Slot:  entry.Slot,
@@ -296,13 +302,12 @@ func (h *UserHandler) onDeleteCharacter(w http.ResponseWriter, r *http.Request) 
 
 	_, invalidUids, err := h.authService.ValidateUserSessions(ctx, sessions)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
+		return nil, err
 	}
 
 	for _, uid := range invalidUids {
 		delete(requests, uid)
-		res.Responses = append(res.Responses, &user.UserDeleteCharacterResult{
+		res.Responses = append(res.Responses, &UserDeleteCharacterResult{
 			Uid:       uid,
 			ErrorCode: session.SESSION_TOKEN_INVALID_ERROR,
 		})
@@ -317,8 +322,7 @@ func (h *UserHandler) onDeleteCharacter(w http.ResponseWriter, r *http.Request) 
 	}())
 
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
+		return nil, err
 	}
 
 	userDeleteCharacters := make([]*user.UserDeleteCharacter, 0, len(requests))
@@ -333,7 +337,7 @@ func (h *UserHandler) onDeleteCharacter(w http.ResponseWriter, r *http.Request) 
 		}
 
 		if foundCharacter == nil {
-			res.Responses = append(res.Responses, &user.UserDeleteCharacterResult{
+			res.Responses = append(res.Responses, &UserDeleteCharacterResult{
 				Uid:       uid,
 				ErrorCode: user.USER_DELETE_CHARACTER_SLOT_NOT_FOUND_ERROR,
 			})
@@ -351,21 +355,101 @@ func (h *UserHandler) onDeleteCharacter(w http.ResponseWriter, r *http.Request) 
 	// 캐릭터 삭제 처리
 	successUids, err := h.userService.DeleteCharactersByUsers(ctx, userDeleteCharacters)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
+		return nil, err
 	}
 
 	for _, uid := range successUids {
 		if _, ok := requests[uid]; ok {
-			res.Responses = append(res.Responses, &user.UserDeleteCharacterResult{
+			res.Responses = append(res.Responses, &UserDeleteCharacterResult{
 				Uid: uid,
 			})
 		} else {
-			res.Responses = append(res.Responses, &user.UserDeleteCharacterResult{
+			res.Responses = append(res.Responses, &UserDeleteCharacterResult{
 				Uid:       uid,
 				ErrorCode: user.USER_DELETE_CHARACTER_DB_WRITE_ERROR,
 			})
 		}
+	}
+
+	return &res, nil
+}
+
+// 캐릭터 생성 핸들러
+func (h *UserHandler) onCreateCharacter(w http.ResponseWriter, r *http.Request) {
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	defer r.Body.Close()
+
+	ret, err := h.createCharacter(r.Context(), string(body))
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	res, ok := ret.(*CreateCharacterResponse)
+	if !ok {
+		http.Error(w, "응답 변환에 실패했습니다.", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+
+	if err := json.NewEncoder(w).Encode(&res); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
+// 캐릭터 이름 중복 확인 핸들러
+func (h *UserHandler) onCheckCharacterName(w http.ResponseWriter, r *http.Request) {
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	defer r.Body.Close()
+
+	ret, err := h.checkCharacterName(r.Context(), string(body))
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	res, ok := ret.(*CheckCharacterNameResponse)
+	if !ok {
+		http.Error(w, "응답 변환에 실패했습니다.", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	if err := json.NewEncoder(w).Encode(&res); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
+// 캐릭터 삭제 핸들러
+func (h *UserHandler) onDeleteCharacter(w http.ResponseWriter, r *http.Request) {
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	defer r.Body.Close()
+
+	ret, err := h.deleteCharacter(r.Context(), string(body))
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	res, ok := ret.(*DeleteCharacterResponse)
+	if !ok {
+		http.Error(w, "응답 변환에 실패했습니다.", http.StatusInternalServerError)
+		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
