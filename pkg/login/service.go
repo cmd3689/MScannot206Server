@@ -14,15 +14,11 @@ type LoginService struct {
 	userRepoHandler UserRepositoryHandler
 }
 
-func (s *LoginService) Init() error {
+func (s *LoginService) Start(ctx context.Context) error {
 	return nil
 }
 
-func (s *LoginService) Start() error {
-	return nil
-}
-
-func (s *LoginService) Stop() error {
+func (s *LoginService) Stop(ctx context.Context) error {
 	return nil
 }
 
